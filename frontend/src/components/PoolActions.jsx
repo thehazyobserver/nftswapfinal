@@ -429,8 +429,13 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         <div>
           <div className="flex items-center justify-between mb-2">
             <div className="font-semibold text-green-400">Stake NFT(s)</div>
-            <div className="text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
-              📦 Max 10 NFTs per batch
+            <div className="flex items-center gap-2">
+              <div className={`text-xs px-2 py-1 rounded ${selectedWalletTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedWalletTokens.length > 0 ? 'bg-green-900/30 text-green-300' : 'bg-gray-800/30 text-gray-400'}`}>
+                📊 {selectedWalletTokens.length}/10 selected
+              </div>
+              <div className="text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
+                📦 Max 10 NFTs per batch
+              </div>
             </div>
           </div>
           <div className="flex gap-3 flex-wrap">
@@ -485,8 +490,13 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         <div>
           <div className="flex items-center justify-between mb-2">
             <div className="font-semibold text-red-400">Unstake NFT(s)</div>
-            <div className="text-xs text-red-300 bg-red-900/30 px-2 py-1 rounded">
-              📦 Max 10 NFTs per batch
+            <div className="flex items-center gap-2">
+              <div className={`text-xs px-2 py-1 rounded ${selectedReceiptTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedReceiptTokens.length > 0 ? 'bg-red-900/30 text-red-300' : 'bg-gray-800/30 text-gray-400'}`}>
+                📊 {selectedReceiptTokens.length}/10 selected
+              </div>
+              <div className="text-xs text-red-300 bg-red-900/30 px-2 py-1 rounded">
+                📦 Max 10 NFTs per batch
+              </div>
             </div>
           </div>
           <div className="flex gap-3 flex-wrap">
