@@ -93,6 +93,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       let collectionAddr = null
       try {
         collectionAddr = await (new ethers.Contract(swapPool, SwapPoolABI, provider)).nftCollection()
+        console.log(`🏷️ NFT Collection Address:`, collectionAddr)
+        console.log(`👤 User Address:`, addr)
+        console.log(`🏊 SwapPool Address:`, swapPool)
         setNftCollection(collectionAddr)
         const nftContract = new ethers.Contract(
           collectionAddr,
@@ -186,11 +189,13 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             const batchResults = await Promise.all(batchPromises)
             walletTokens.push(...batchResults)
           }
+          console.log(`✅ Final wallet tokens:`, walletTokens.length, walletTokens)
           setWalletNFTs(walletTokens)
           setApprovedMap(approvedMapTemp)
           setWalletLoading(false)
         }
       } catch (e) {
+        console.error('❌ Error fetching wallet NFTs:', e)
         setWalletNFTs([])
         setWalletLoading(false)
       }
