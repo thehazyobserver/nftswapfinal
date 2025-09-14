@@ -120,6 +120,15 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         if (addr) {
           const balance = await stonerNftContract.balanceOf(addr)
           console.log(`🎯 Stoner NFT Balance for ${addr}:`, balance.toString())
+          
+          // Validate balance - if it's impossibly large, the contract's balanceOf might be broken
+          const balanceNumber = Number(balance)
+          const isBalanceRealistic = balanceNumber > 0 && balanceNumber <= 10000
+          
+          if (balanceNumber > 10000) {
+            console.log(`⚠️ Balance seems unusually large (${balance.toString()}), will use fallback scanning only`)
+          }
+          
           const tokens = []
           // Check isApprovedForAll - check if Stoner NFTs are approved for the SwapPool
           let approvedAll = false
@@ -130,27 +139,34 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
 
           let tokenIds = []
           
-          // Try enumerable approach first
-          try {
-            console.log(`🔍 Trying enumerable approach for ${balance.toString()} tokens...`)
-            const tokenIdPromises = []
-            for (let i = 0; i < Number(balance); i++) {
-              tokenIdPromises.push(nftContract.tokenOfOwnerByIndex(addr, i))
+          // Try enumerable approach first (only if balance is realistic)
+          if (isBalanceRealistic) {
+            try {
+              console.log(`🔍 Trying enumerable approach for ${balance.toString()} Stoner tokens...`)
+              const tokenIdPromises = []
+              for (let i = 0; i < balanceNumber; i++) {
+                tokenIdPromises.push(stonerNftContract.tokenOfOwnerByIndex(addr, i))
+              }
+              tokenIds = await Promise.all(tokenIdPromises)
+              console.log(`✅ Enumerable approach successful, found tokens:`, tokenIds.map(id => id.toString()))
+            } catch (enumerableError) {
+              console.log(`❌ tokenOfOwnerByIndex not supported, will use fallback scan for Stoner NFTs`)
+              tokenIds = [] // Reset for fallback
             }
-            tokenIds = await Promise.all(tokenIdPromises)
-            console.log(`✅ Enumerable approach successful, found tokens:`, tokenIds.map(id => id.toString()))
-          } catch (enumerableError) {
-            console.log(`❌ tokenOfOwnerByIndex not supported, using fallback scan for Stoner NFTs`)
-            console.log(`📊 Scanning for tokens owned by ${addr}...`)
-            
-            // Fallback: scan through token IDs to find owned tokens
+          } else {
+            console.log(`⚠️ Unrealistic balance (${balance.toString()}), skipping enumerable approach`)
+            tokenIds = [] // Force fallback
+          }
+          
+          // If we still don't have tokens, try fallback scan
+          if (tokenIds.length === 0) {
             try {
               // Try to get total supply to know how many tokens exist
               let maxTokenId = 10000 // Default fallback range
               try {
-                const totalSupply = await nftContract.totalSupply()
+                const totalSupply = await stonerNftContract.totalSupply()
                 maxTokenId = Math.min(Number(totalSupply) + 100, 10000) // Scan a bit beyond totalSupply but cap at 10k
-                console.log(`📈 Total supply: ${totalSupply.toString()}, scanning up to token ${maxTokenId}`)
+                console.log(`📈 Stoner NFT Total supply: ${totalSupply.toString()}, scanning up to token ${maxTokenId}`)
               } catch {
                 console.log(`📈 Total supply not available, scanning up to token ${maxTokenId}`)
               }
@@ -165,7 +181,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                 // Create batch of ownership checks
                 for (let tokenId = startId; tokenId <= endId; tokenId++) {
                   batch.push(
-                    nftContract.ownerOf(tokenId)
+                    stonerNftContract.ownerOf(tokenId)
                       .then(owner => ({ tokenId, owner }))
                       .catch(() => null) // Token doesn't exist or other error
                   )
