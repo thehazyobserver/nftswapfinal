@@ -32,6 +32,45 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
     return provider.getSigner()
   }
 
+  // Manual refresh function for user-triggered updates
+  const refreshNFTs = async () => {
+    console.log('Manual refresh triggered')
+    setWalletLoading(true)
+    setReceiptLoading(true)
+    setPoolLoading(true)
+    
+    // Clear existing data
+    setWalletNFTs([])
+    setReceiptNFTs([])
+    setPoolNFTs([])
+    setAddress(null)
+    
+    // Small delay to show loading state
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Re-fetch everything
+    const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
+    if (!provider) {
+      setWalletLoading(false)
+      setReceiptLoading(false)
+      setPoolLoading(false)
+      return
+    }
+    
+    let addr = null
+    if (window.ethereum) {
+      try {
+        const signer = await provider.getSigner()
+        addr = await signer.getAddress()
+      } catch (e) {
+        console.warn('Could not get signer:', e)
+      }
+    }
+    setAddress(addr)
+    
+    // This will trigger the main useEffect to refetch NFTs
+  }
+
   // Fetch user's NFTs and staked/receipt tokens
   useEffect(() => {
     const fetchNFTs = async () => {
@@ -282,7 +321,35 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
     }
     fetchNFTs()
     // eslint-disable-next-line
-  }, [swapPool, stakeReceipt])
+  }, [swapPool, stakeReceipt, address])
+
+  // Listen for wallet account changes
+  useEffect(() => {
+    if (window.ethereum) {
+      const handleAccountsChanged = (accounts) => {
+        console.log('Wallet accounts changed:', accounts)
+        // Clear current data and refetch
+        setWalletNFTs([])
+        setReceiptNFTs([])
+        setPoolNFTs([])
+        setAddress(accounts[0] || null)
+      }
+
+      const handleChainChanged = (chainId) => {
+        console.log('Chain changed:', chainId)
+        // Reload the page to reset state
+        window.location.reload()
+      }
+
+      window.ethereum.on('accountsChanged', handleAccountsChanged)
+      window.ethereum.on('chainChanged', handleChainChanged)
+
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
+        window.ethereum.removeListener('chainChanged', handleChainChanged)
+      }
+    }
+  }, [])
 
   // Batch Stake
   const handleStake = async () => {
@@ -394,6 +461,12 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       setStatus('You can only swap up to 10 NFTs at once.')
       return
     }
+
+    // Check if there are enough pool NFTs available for swapping
+    if (poolNFTs.length < selectedSwapTokens.length) {
+      setStatus(`❌ Insufficient liquidity: Only ${poolNFTs.length} NFT${poolNFTs.length !== 1 ? 's' : ''} available in pool, but you selected ${selectedSwapTokens.length}`)
+      return
+    }
     
     if (!nftCollection) {
       setStatus('NFT collection address not available')
@@ -419,10 +492,17 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       const userAddr = await signer.getAddress()
       
       // Check if user owns all tokens
+      setStatus('Verifying ownership...')
       for (const tokenId of selectedSwapTokens) {
-        const owner = await nftContract.ownerOf(tokenId)
-        if (owner.toLowerCase() !== userAddr.toLowerCase()) {
-          setStatus(`❌ You do not own NFT #${tokenId}`)
+        try {
+          const owner = await nftContract.ownerOf(tokenId)
+          if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+            setStatus(`❌ You do not own NFT #${tokenId}`)
+            setLoading(false)
+            return
+          }
+        } catch (err) {
+          setStatus(`❌ Error checking ownership of NFT #${tokenId}`)
           setLoading(false)
           return
         }
@@ -437,12 +517,19 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         try {
           const isApprovedForAll = await nftContract.isApprovedForAll(userAddr, swapPool)
           if (!isApprovedForAll) {
-            setStatus('Approving all NFTs for swap...')
+            setStatus('Requesting approval for all NFTs...')
             const approveTx = await nftContract.setApprovalForAll(swapPool, true)
             await approveTx.wait()
+            setStatus('✅ All NFTs approved')
           }
         } catch (e) {
+          if (e.code === 'ACTION_REJECTED') {
+            setStatus('❌ User cancelled approval transaction')
+            setLoading(false)
+            return
+          }
           // Fallback to individual approvals if setApprovalForAll fails
+          console.warn('setApprovalForAll failed, using individual approvals:', e)
           needsApproval = true
         }
       } else {
@@ -452,11 +539,22 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       // Individual approvals if needed
       if (needsApproval) {
         for (const tokenId of selectedSwapTokens) {
-          const approved = await nftContract.getApproved(tokenId)
-          if (approved.toLowerCase() !== swapPool.toLowerCase()) {
-            setStatus(`Approving NFT #${tokenId} for swap...`)
-            const approveTx = await nftContract.approve(swapPool, tokenId)
-            await approveTx.wait()
+          try {
+            const approved = await nftContract.getApproved(tokenId)
+            if (approved.toLowerCase() !== swapPool.toLowerCase()) {
+              setStatus(`Requesting approval for NFT #${tokenId}...`)
+              const approveTx = await nftContract.approve(swapPool, tokenId)
+              await approveTx.wait()
+            }
+          } catch (e) {
+            if (e.code === 'ACTION_REJECTED') {
+              setStatus('❌ User cancelled approval transaction')
+              setLoading(false)
+              return
+            }
+            setStatus(`❌ Failed to approve NFT #${tokenId}: ${e.message}`)
+            setLoading(false)
+            return
           }
         }
       }
@@ -486,22 +584,25 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       
     } catch (e) {
       console.error('Swap error:', e)
-      const errorMessage = e.reason || e.message || 'Unknown error'
       
-      // Handle specific contract errors
-      if (errorMessage.includes('TokenNotApproved')) {
+      // Handle specific error types
+      if (e.code === 'ACTION_REJECTED') {
+        setStatus('❌ User cancelled transaction')
+      } else if (e.data === '0xa17e11d5' || e.message.includes('InsufficientLiquidity')) {
+        setStatus(`❌ Insufficient liquidity: Not enough NFTs in pool for ${selectedSwapTokens.length} swap${selectedSwapTokens.length > 1 ? 's' : ''}`)
+      } else if (e.data === '0xa0712d68' || e.message.includes('SameTokenSwap')) {
+        setStatus('❌ Cannot swap: One of your NFTs is already in the pool')
+      } else if (e.data === '0x82b42900' || e.message.includes('TokenNotApproved')) {
         setStatus('❌ NFT not approved for transfer')
-      } else if (errorMessage.includes('NotTokenOwner')) {
-        setStatus('❌ You do not own this NFT')
-      } else if (errorMessage.includes('SameTokenSwap')) {
-        setStatus('❌ Cannot swap for the same token')
-      } else if (errorMessage.includes('NoTokensAvailable')) {
-        setStatus('❌ No tokens available in the pool')
-      } else if (errorMessage.includes('IncorrectFee')) {
+      } else if (e.data === '0x8baa579f' || e.message.includes('NotTokenOwner')) {
+        setStatus('❌ You do not own one or more of the selected NFTs')
+      } else if (e.data === '0x025dbdd4' || e.message.includes('IncorrectFee')) {
         setStatus('❌ Incorrect swap fee sent')
-      } else if (errorMessage.includes('InsufficientLiquidity')) {
-        setStatus('❌ Insufficient liquidity in pool')
+      } else if (e.data === '0xd05cb609' || e.message.includes('NotInitialized')) {
+        setStatus('❌ Pool not initialized')
       } else {
+        // Generic error handling
+        const errorMessage = e.reason || e.message || 'Unknown error'
         setStatus('❌ Swap failed: ' + errorMessage)
       }
     }
