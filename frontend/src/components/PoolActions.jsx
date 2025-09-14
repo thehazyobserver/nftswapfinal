@@ -202,18 +202,21 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                   console.log(`🔍 Scanned tokens ${startId}-${endId}, found ${ownedTokens.length} owned tokens so far`)
                 }
                 
-                // Stop if we found all the tokens according to balance
-                if (ownedTokens.length >= Number(balance)) {
-                  console.log(`✅ Found all ${ownedTokens.length} tokens, stopping scan early`)
+                // For efficiency, if balance was realistic and we found all tokens, stop
+                // But if balance is unrealistic, continue scanning to find all actual tokens
+                if (isBalanceRealistic && ownedTokens.length >= balanceNumber) {
+                  console.log(`✅ Found all ${ownedTokens.length} tokens according to realistic balance, stopping scan early`)
                   break
                 }
               }
               
               tokenIds = ownedTokens
-              console.log(`✅ Fallback scan complete, found ${tokenIds.length} tokens:`, tokenIds.map(id => id.toString()))
+              console.log(`✅ Stoner NFT fallback scan complete, found ${tokenIds.length} tokens:`, tokenIds.map(id => id.toString()))
               
-              if (tokenIds.length !== Number(balance)) {
-                console.warn(`⚠️ Token count mismatch: balance=${balance.toString()}, found=${tokenIds.length}`)
+              if (isBalanceRealistic && tokenIds.length !== balanceNumber) {
+                console.warn(`⚠️ Stoner NFT count mismatch: balance=${balance.toString()}, found=${tokenIds.length}`)
+              } else if (!isBalanceRealistic) {
+                console.log(`✅ Found ${tokenIds.length} Stoner NFTs (balance was unrealistic: ${balance.toString()})`)
               }
             } catch (fallbackError) {
               console.error('❌ Fallback token scanning failed:', fallbackError)
@@ -255,8 +258,12 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           const walletTokens = []
           const approvedMapTemp = {}
 
+          console.log(`🔄 Processing metadata for ${tokenIds.length} Stoner NFTs in batches of ${batchSize}`)
+
           for (let i = 0; i < tokenIds.length; i += batchSize) {
             const batch = tokenIds.slice(i, i + batchSize)
+            console.log(`📦 Processing batch ${Math.floor(i/batchSize) + 1}: tokens ${i+1}-${Math.min(i+batchSize, tokenIds.length)}`)
+            
             const batchPromises = batch.map(async (tokenId, batchIndex) => {
               const globalIndex = i + batchIndex
               let image = null
@@ -292,6 +299,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             // Wait for current batch to complete
             const batchResults = await Promise.all(batchPromises)
             walletTokens.push(...batchResults)
+            console.log(`✅ Completed batch ${Math.floor(i/batchSize) + 1}, total processed: ${walletTokens.length}`)
           }
           console.log(`✅ Final Stoner NFT tokens:`, walletTokens.length, walletTokens)
           setWalletNFTs(walletTokens)
