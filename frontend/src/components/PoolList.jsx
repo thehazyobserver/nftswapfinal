@@ -155,6 +155,9 @@ export default function PoolList() {
         }
       }
 
+      // Debug: log allPools before deduplication
+      console.log('All pools from contract:', allPools)
+
       // Deduplicate by nftCollection, keep latest by createdAt
       const latestByCollection = {}
       for (const p of allPools) {
@@ -162,6 +165,9 @@ export default function PoolList() {
           latestByCollection[p.nftCollection] = p
         }
       }
+      // Debug: log deduplication result
+      console.log('Latest by collection:', latestByCollection)
+
       const mapped = Object.values(latestByCollection).map(p => ({
         nftCollection: p.nftCollection,
         swapPool: p.swapPool,
