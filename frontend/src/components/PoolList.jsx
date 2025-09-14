@@ -16,12 +16,29 @@ export default function PoolList() {
 
   useEffect(() => {
     const init = async () => {
-      if (window.ethereum) {
-        const p = new ethers.BrowserProvider(window.ethereum)
-        setProvider(p)
-      } else if (import.meta.env.VITE_RPC_URL) {
-        const p = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL)
-        setProvider(p)
+      // Prefer using injected wallet RPC (MetaMask) when available
+      try {
+        if (window.ethereum) {
+          const p = new ethers.BrowserProvider(window.ethereum)
+          setProvider(p)
+          // Check chain id and warn if not Sonic (146)
+          try {
+            const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' })
+            const chainId = parseInt(chainIdHex, 16)
+            if (chainId !== 146) {
+              console.warn('Connected chainId', chainId, 'expected 146 (Sonic)')
+              // only warn; user can still switch in wallet
+              // but we surface an alert when they try to load pools
+            }
+          } catch (e) {
+            console.warn('Could not read chainId from injected provider', e)
+          }
+        } else if (import.meta.env.VITE_RPC_URL) {
+          const p = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL)
+          setProvider(p)
+        }
+      } catch (e) {
+        console.warn('Provider init failed', e)
       }
       // If factory address not provided at build-time, try to fetch runtime config
       if (!factoryAddressEnv) {
@@ -61,14 +78,21 @@ export default function PoolList() {
     try {
       // Quick network / contract validation
       try {
+        const network = await provider.getNetwork()
+        // network.chainId for ethers v6 returns a number
+        if (network && network.chainId && Number(network.chainId) !== 146) {
+          setLoading(false)
+          return alert(`Connected to chain ${network.chainId}. Please switch your wallet/RPC to Sonic (chainId 146) and retry.`)
+        }
+
         const code = await provider.send('eth_getCode', [factoryAddress, 'latest'])
         if (!code || code === '0x' || code === '0x0') {
           setLoading(false)
-          return alert(`No contract deployed at ${factoryAddress}. Make sure the address is correct and you're connected to the right chain.`)
+          return alert(`No contract deployed at ${factoryAddress} on the current network. Make sure the address is correct and you're connected to Sonic (chainId 146).`)
         }
       } catch (err) {
-        console.warn('eth_getCode failed', err)
-        // continue - provider might not support send in this environment
+        console.warn('Network/code check failed', err)
+        // continue - provider might not support some RPC methods
       }
 
       const contract = new ethers.Contract(factoryAddress, FactoryABI, provider)
