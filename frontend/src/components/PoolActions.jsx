@@ -107,6 +107,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         )
         if (addr) {
           const balance = await nftContract.balanceOf(addr)
+          console.log(`🎯 NFT Balance for ${addr}:`, balance.toString())
           const tokens = []
           // Check isApprovedForAll
           let approvedAll = false
@@ -121,6 +122,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             tokenIdPromises.push(nftContract.tokenOfOwnerByIndex(addr, i))
           }
           const tokenIds = await Promise.all(tokenIdPromises)
+          console.log(`🔢 Token IDs found:`, tokenIds.map(id => id.toString()))
 
           // Batch fetch all token URIs (parallel)
           const tokenUriPromises = tokenIds.map(tokenId => 
@@ -130,6 +132,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             })
           )
           const tokenUris = await Promise.all(tokenUriPromises)
+          console.log(`🌐 Token URIs fetched:`, tokenUris.length)
 
           // Batch check approvals (parallel)
           const approvalPromises = tokenIds.map(tokenId => {
