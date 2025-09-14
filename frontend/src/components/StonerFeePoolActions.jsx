@@ -119,22 +119,33 @@ export default function StonerFeePoolActions() {
           let image = null
           let approved = false
           try {
+            console.log('Fetching metadata for Stoner NFT token:', tokenId);
             let uri = await nftContract.tokenURI(tokenId)
+            console.log('Token URI:', uri);
+            
             if (uri.startsWith('ipfs://')) {
               uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
             }
             if (uri.startsWith('http')) {
+              console.log('Fetching metadata from:', uri);
               const resp = await fetch(uri)
+              if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+              }
               const meta = await resp.json()
+              console.log('Metadata response:', meta);
+              
               image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
               if (image && image.startsWith('ipfs://')) {
                 image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
+              console.log('Processed image URL:', image);
+              
               if (!image) {
-                console.warn('No image field in metadata', meta, uri)
+                console.warn('No image field in metadata for token', tokenId, meta, uri)
               }
             } else {
-              console.warn('tokenURI is not http(s):', uri)
+              console.warn('tokenURI is not http(s) for token', tokenId, ':', uri)
             }
             // Check individual approval
             if (approvedAll) {
@@ -144,7 +155,7 @@ export default function StonerFeePoolActions() {
               approved = approvedAddr && STONER_FEE_POOL_ADDRESS && approvedAddr.toLowerCase() === STONER_FEE_POOL_ADDRESS.toLowerCase()
             }
           } catch (err) {
-            console.warn('Failed to fetch NFT metadata/image', tokenId, err)
+            console.error('Failed to fetch NFT metadata/image for token', tokenId, err)
           }
           tokens.push({ tokenId: tokenId?.toString(), image })
           approvedMapTemp[tokenId?.toString()] = approved
@@ -158,20 +169,30 @@ export default function StonerFeePoolActions() {
             try {
               const owner = await nftContract.ownerOf(tokenId)
               if (owner && owner.toLowerCase() === addr.toLowerCase()) {
+                console.log('Found owned Stoner NFT token (fallback scan):', tokenId);
                 let image = null
                 let approved = false
                 try {
                   let uri = await nftContract.tokenURI(tokenId)
+                  console.log('Fallback: Token URI for', tokenId, ':', uri);
+                  
                   if (uri.startsWith('ipfs://')) {
                     uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
                   }
                   if (uri.startsWith('http')) {
+                    console.log('Fallback: Fetching metadata from:', uri);
                     const resp = await fetch(uri)
+                    if (!resp.ok) {
+                      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+                    }
                     const meta = await resp.json()
+                    console.log('Fallback: Metadata for token', tokenId, ':', meta);
+                    
                     image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
                     if (image && image.startsWith('ipfs://')) {
                       image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
                     }
+                    console.log('Fallback: Processed image URL for token', tokenId, ':', image);
                   }
                   // Check individual approval in fallback
                   if (approvedAll) {
@@ -180,18 +201,25 @@ export default function StonerFeePoolActions() {
                     const approvedAddr = await nftContract.getApproved(tokenId)
                     approved = approvedAddr && STONER_FEE_POOL_ADDRESS && approvedAddr.toLowerCase() === STONER_FEE_POOL_ADDRESS.toLowerCase()
                   }
-                } catch {}
+                } catch (err) {
+                  console.error('Fallback: Failed to fetch metadata for token', tokenId, err);
+                }
                 tokens.push({ tokenId: tokenId.toString(), image })
                 approvedMapTemp[tokenId.toString()] = approved
                 found++
                 if (found >= count) break
               }
-            } catch {}
+            } catch (err) {
+              // Token doesn't exist or other error, continue scanning
+            }
           }
         }
+        console.log('Final Stoner NFT tokens array:', tokens);
+        console.log('Final approval map:', approvedMapTemp);
         setWalletNFTs(tokens)
         setApprovedMap(approvedMapTemp)
       } catch (e) {
+        console.error('Error fetching Stoner NFTs:', e);
         setWalletNFTs([])
         setApprovedMap({})
       }

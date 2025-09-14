@@ -150,28 +150,22 @@ export default function PoolList() {
         allPools = []
       }
 
-      // Debug: log allPools before deduplication
+      // Debug: log allPools before processing
       console.log('All active pools from contract:', allPools)
 
-      // Deduplicate by nftCollection, keep latest by createdAt
-      const latestByCollection = {}
-      for (const p of allPools) {
-        const collectionKey = p.nftCollection.toLowerCase()
-        if (!latestByCollection[collectionKey] || Number(p.createdAt) > Number(latestByCollection[collectionKey].createdAt)) {
-          latestByCollection[collectionKey] = p
-        }
-      }
-      // Debug: log deduplication result
-      console.log('Latest by collection (case-insensitive):', latestByCollection)
-
-      const mapped = Object.values(latestByCollection).map(p => ({
+      // Don't deduplicate - show all pools even if they share the same NFT collection
+      // Users may have multiple pools for the same collection with different parameters
+      const mapped = allPools.map(p => ({
         nftCollection: p.nftCollection,
         swapPool: p.swapPool,
         stakeReceipt: p.stakeReceipt,
         createdAt: new Date(Number(p.createdAt) * 1000).toLocaleString(),
         creator: p.creator,
-        active: p.active
+        active: p.active,
+        poolAddress: p.swapPool // Keep track of unique pool address
       }))
+      
+      console.log('All pools (no deduplication applied):', mapped)
       setPools(mapped)
 
       // Fetch collection names
@@ -222,20 +216,32 @@ export default function PoolList() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {pools.map((p, i) => (
             <div
-              key={i}
+              key={`${p.swapPool}-${i}`}
               className="p-4 sm:p-5 bg-card dark:bg-card rounded-2xl shadow-lg flex flex-col sm:flex-row gap-4 sm:gap-5 items-center transition-transform duration-200 hover:scale-105 hover:shadow-2xl border border-transparent hover:border-accent/30 cursor-pointer"
               style={{ minHeight: 120 }}
             >
               <NFTCollectionImage address={p.nftCollection} size={56} />
               <div className="flex-1 w-full">
-                <div className="font-semibold text-base sm:text-lg text-accent mb-1">{poolNames[p.nftCollection] || 'Collection'} <span className="font-mono text-muted dark:text-muted">{p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}</span></div>
-                <div className="text-xs text-muted dark:text-muted">SwapPool: <span className="font-mono">{p.swapPool.slice(0, 6)}...{p.swapPool.slice(-4)}</span></div>
-                <div className="text-xs text-muted dark:text-muted">Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 6)}...{p.stakeReceipt.slice(-4)}</span></div>
+                <div className="font-semibold text-base sm:text-lg text-accent mb-1">
+                  {poolNames[p.nftCollection] || 'Collection'}
+                  <span className="font-mono text-muted dark:text-muted ml-2">
+                    {p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}
+                  </span>
+                </div>
+                <div className="text-xs text-muted dark:text-muted">
+                  Pool: <span className="font-mono">{p.swapPool.slice(0, 8)}...{p.swapPool.slice(-6)}</span>
+                </div>
+                <div className="text-xs text-muted dark:text-muted">
+                  Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 8)}...{p.stakeReceipt.slice(-6)}</span>
+                </div>
+                <div className="text-xs text-muted dark:text-muted">
+                  Creator: <span className="font-mono">{p.creator.slice(0, 6)}...{p.creator.slice(-4)}</span>
+                </div>
                 <div className="text-xs text-muted dark:text-muted mt-1">Created: {p.createdAt}</div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button className="px-3 py-1 bg-gradient-to-r from-accent to-indigo-700 text-white rounded shadow hover:from-indigo-600 hover:to-blue-600 transition" onClick={() => setSelectedPool(p)}>Details</button>
-                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
-                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
+                  <button className="px-3 py-1 bg-gradient-to-r from-accent to-indigo-700 text-white rounded shadow hover:from-indigo-600 hover:to-blue-600 transition text-xs" onClick={() => setSelectedPool(p)}>Details</button>
+                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20 text-xs" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Pool</button>
+                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20 text-xs" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
                 </div>
               </div>
             </div>
