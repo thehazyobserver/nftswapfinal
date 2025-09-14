@@ -1,5 +1,6 @@
 import React from 'react'
 import PoolActions from './PoolActions'
+import NFTCollectionImage from './NFTCollectionImage'
 
 export default function PoolDetail({ pool, onClose }) {
   return (
@@ -10,13 +11,16 @@ export default function PoolDetail({ pool, onClose }) {
           <button className="text-gray-600" onClick={onClose}>Close</button>
         </div>
 
-        <div className="space-y-2">
-          <div><strong>Collection:</strong> {pool.nftCollection}</div>
-          <div><strong>Swap Pool:</strong> {pool.swapPool}</div>
-          <div><strong>Stake Receipt:</strong> {pool.stakeReceipt}</div>
-          <div><strong>Creator:</strong> {pool.creator}</div>
-          <div><strong>Created:</strong> {pool.createdAt}</div>
-          <div><strong>Active:</strong> {pool.active ? 'Yes' : 'No'}</div>
+        <div className="space-y-2 flex items-center gap-4">
+          <NFTCollectionImage address={pool.nftCollection} size={64} />
+          <div>
+            <div><strong>Collection:</strong> {pool.nftCollection}</div>
+            <div><strong>Swap Pool:</strong> {pool.swapPool}</div>
+            <div><strong>Stake Receipt:</strong> {pool.stakeReceipt}</div>
+            <div><strong>Creator:</strong> {pool.creator}</div>
+            <div><strong>Created:</strong> {pool.createdAt}</div>
+            <div><strong>Active:</strong> {pool.active ? 'Yes' : 'No'}</div>
+          </div>
         </div>
 
         <div className="mt-6 flex gap-2">

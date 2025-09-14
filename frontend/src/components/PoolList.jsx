@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { ethers } from 'ethers'
 import FactoryABI from '../abis/MultiPoolFactoryNonProxy.json'
 import PoolDetail from './PoolDetail'
+import NFTCollectionImage from './NFTCollectionImage'
+import StonerFeePoolActions from './StonerFeePoolActions'
 
 export default function PoolList() {
   const [provider, setProvider] = useState(null)
@@ -152,7 +154,8 @@ export default function PoolList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <StonerFeePoolActions />
+  <div className="flex items-center justify-between mb-4">
         <div className="flex gap-2">
           <button className="px-4 py-2 bg-indigo-600 text-white rounded" onClick={connect}>
             {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
@@ -169,15 +172,18 @@ export default function PoolList() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {pools.map((p, i) => (
-            <div key={i} className="p-4 bg-white rounded shadow">
-              <div className="font-semibold">Collection: {p.nftCollection}</div>
-              <div className="text-sm text-gray-600">SwapPool: {p.swapPool}</div>
-              <div className="text-sm text-gray-600">Receipt: {p.stakeReceipt}</div>
-              <div className="text-sm text-gray-500 mt-2">Created: {p.createdAt}</div>
-              <div className="mt-3 flex gap-2">
-                <button className="px-3 py-1 bg-indigo-500 text-white rounded" onClick={() => setSelectedPool(p)}>Details</button>
-                <button className="px-3 py-1 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
-                <button className="px-3 py-1 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
+            <div key={i} className="p-4 bg-white rounded shadow flex gap-4 items-center">
+              <NFTCollectionImage address={p.nftCollection} size={48} />
+              <div className="flex-1">
+                <div className="font-semibold">Collection: {p.nftCollection}</div>
+                <div className="text-sm text-gray-600">SwapPool: {p.swapPool}</div>
+                <div className="text-sm text-gray-600">Receipt: {p.stakeReceipt}</div>
+                <div className="text-sm text-gray-500 mt-2">Created: {p.createdAt}</div>
+                <div className="mt-3 flex gap-2">
+                  <button className="px-3 py-1 bg-indigo-500 text-white rounded" onClick={() => setSelectedPool(p)}>Details</button>
+                  <button className="px-3 py-1 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
+                  <button className="px-3 py-1 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
+                </div>
               </div>
             </div>
           ))}
