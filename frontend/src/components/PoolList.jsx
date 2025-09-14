@@ -25,6 +25,7 @@ export default function PoolList() {
   const [selectedPool, setSelectedPool] = useState(null)
   const [providerError, setProviderError] = useState('')
   const [providerLoading, setProviderLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const factoryAddressEnv = import.meta.env.VITE_FACTORY_ADDRESS || ''
   const [factoryAddress, setFactoryAddress] = useState(factoryAddressEnv)
@@ -101,7 +102,11 @@ export default function PoolList() {
   }, [])
 
   const connect = async () => {
-    if (!window.ethereum) return alert('Please install MetaMask or another wallet')
+    if (!window.ethereum) {
+      setErrorMessage('Please install MetaMask or another wallet')
+      return
+    }
+    setErrorMessage('')
     try {
       await window.ethereum.request({ method: 'eth_requestAccounts' })
       const p = new ethers.BrowserProvider(window.ethereum)
@@ -111,17 +116,22 @@ export default function PoolList() {
       setSigner(s)
       setAddress(addr)
     } catch (err) {
+      setErrorMessage('Failed to connect wallet: ' + (err.message || err.toString()))
       console.error(err)
     }
   }
 
   const fetchPools = async () => {
-    if (!factoryAddress) return alert('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
+    if (!factoryAddress) {
+      setErrorMessage('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
+      return
+    }
     if (!provider) {
       console.warn('fetchPools called without provider')
       return
     }
     setLoading(true)
+    setErrorMessage('')
     try {
       // Quick network / contract validation
       try {
@@ -129,13 +139,15 @@ export default function PoolList() {
         // network.chainId for ethers v6 returns a number
         if (network && network.chainId && Number(network.chainId) !== 146) {
           setLoading(false)
-          return alert(`Connected to chain ${network.chainId}. Please switch your wallet/RPC to Sonic (chainId 146) and retry.`)
+          setErrorMessage(`Connected to chain ${network.chainId}. Please switch your wallet/RPC to Sonic (chainId 146) and retry.`)
+          return
         }
 
         const code = await provider.send('eth_getCode', [factoryAddress, 'latest'])
         if (!code || code === '0x' || code === '0x0') {
           setLoading(false)
-          return alert(`No contract deployed at ${factoryAddress} on the current network. Make sure the address is correct and you're connected to Sonic (chainId 146).`)
+          setErrorMessage(`No contract deployed at ${factoryAddress} on the current network. Make sure the address is correct and you're connected to Sonic (chainId 146).`)
+          return
         }
       } catch (err) {
         console.warn('Network/code check failed', err)
@@ -183,9 +195,9 @@ export default function PoolList() {
       console.error('Failed to fetch pools', err)
       // Display helpful hints
       if (err.code === 'BAD_DATA') {
-        alert('Failed to decode on-chain result. This often means the contract ABI does not match or you are connected to the wrong RPC/network.')
+        setErrorMessage('Failed to decode on-chain result. This often means the contract ABI does not match or you are connected to the wrong RPC/network.')
       } else {
-        alert('Failed to fetch pools: ' + (err.message || String(err)))
+        setErrorMessage('Failed to fetch pools: ' + (err.message || String(err)))
       }
     }
     setLoading(false)
@@ -200,105 +212,198 @@ export default function PoolList() {
   }, [provider, factoryAddress]);
 
   return (
-    <div className="relative">
-      <div className="absolute top-4 right-4 z-50">
-        <button className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition" onClick={connect}>
-          {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
-        </button>
-      </div>
-      {providerLoading && (
-        <div className="p-4 bg-blue-50 text-blue-700 rounded shadow text-center font-semibold mb-6 mt-8 flex items-center justify-center gap-3">
-          <div className="w-5 h-5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
-          Connecting to Sonic Network...
+    <div className="space-y-6">
+      {/* Wallet Connection Section */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-card/50 rounded-xl border border-accent/10">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${address ? 'bg-green-400' : provider ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
+            <span className="text-sm font-medium">
+              {address ? `Connected: ${address.slice(0,6)}...${address.slice(-4)}` : provider ? 'Provider Ready' : 'Not Connected'}
+            </span>
+          </div>
         </div>
-      )}
-      {!providerLoading && providerError && (
-        <div className="p-4 bg-red-100 text-red-700 rounded shadow text-center font-semibold mb-6 mt-8">
-          {providerError}
-        </div>
-      )}
-      <StonerFeePoolActions />
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2 mt-12">
-        <div className="text-xs sm:text-sm text-muted dark:text-muted">Factory: {factoryAddress || 'Not set'}</div>
         <button 
-          onClick={fetchPools} 
-          disabled={loading}
-          className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="px-4 py-2 bg-accent text-white rounded-lg shadow hover:bg-accent/80 transition-colors font-medium" 
+          onClick={connect}
         >
-          {loading && (
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-          )}
-          {loading ? 'Loading...' : 'Refresh Pools'}
+          {address ? 'Connected' : 'Connect Wallet'}
         </button>
       </div>
 
+      {/* Error Messages */}
+      {errorMessage && (
+        <div className="p-4 bg-red-900/20 border border-red-500/20 text-red-400 rounded-xl">
+          <div className="flex items-center gap-2 mb-2">
+            <span>⚠️</span>
+            <span className="font-semibold">Error</span>
+          </div>
+          <p className="text-sm">{errorMessage}</p>
+        </div>
+      )}
 
-      {loading && pools.length === 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {[1, 2].map((i) => (
-            <div key={i} className="p-4 sm:p-5 bg-card dark:bg-card rounded-2xl shadow-lg animate-pulse">
-              <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 items-center">
-                <div className="w-14 h-14 bg-gray-300 rounded"></div>
-                <div className="flex-1 w-full space-y-2">
-                  <div className="h-4 bg-gray-300 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-300 rounded w-1/2"></div>
-                  <div className="h-3 bg-gray-300 rounded w-2/3"></div>
-                  <div className="flex gap-2 mt-4">
-                    <div className="h-6 bg-gray-300 rounded w-16"></div>
-                    <div className="h-6 bg-gray-300 rounded w-20"></div>
+      {/* Provider Loading */}
+      {providerLoading && (
+        <div className="p-6 bg-card/30 rounded-xl text-center">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+            <span className="font-semibold">Connecting to Sonic Network...</span>
+          </div>
+          <p className="text-sm text-muted">Please wait while we establish connection</p>
+        </div>
+      )}
+
+      {/* Provider Error */}
+      {!providerLoading && providerError && (
+        <div className="p-4 bg-red-900/20 border border-red-500/20 text-red-400 rounded-xl">
+          <div className="flex items-center gap-2 mb-2">
+            <span>🔌</span>
+            <span className="font-semibold">Connection Error</span>
+          </div>
+          <p className="text-sm">{providerError}</p>
+        </div>
+      )}
+
+      {/* Stoner Fee Pool Section */}
+      <StonerFeePoolActions />
+
+      {/* Swap Pools Section */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-accent">Swap Pools</h2>
+            <div className="px-3 py-1 bg-accent/10 text-accent rounded-full text-sm font-medium">
+              {pools.length} active
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-muted">
+              Factory: <span className="font-mono text-accent">{factoryAddress?.slice(0, 6)}...{factoryAddress?.slice(-4) || 'Not set'}</span>
+            </div>
+            <button 
+              onClick={fetchPools} 
+              disabled={loading}
+              className="px-4 py-2 bg-accent text-white rounded-lg shadow hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+            >
+              {loading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
+              {loading ? 'Loading...' : 'Refresh Pools'}
+            </button>
+          </div>
+        </div>
+
+        {/* Pool Loading State */}
+        {loading && pools.length === 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-4 sm:p-5 bg-card rounded-2xl shadow-lg animate-pulse">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gray-600 rounded-lg"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-600 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-600 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-gray-600 rounded w-2/3"></div>
+                    <div className="h-3 bg-gray-600 rounded w-1/2"></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="h-6 bg-gray-600 rounded w-16"></div>
+                    <div className="h-6 bg-gray-600 rounded w-20"></div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : pools.length === 0 ? (
-        <div className="p-6 bg-card rounded shadow text-center">
-          <div className="text-4xl mb-4">🏊‍♂️</div>
-          <div className="text-muted dark:text-muted mb-2">No pools found</div>
-          <div className="text-sm text-muted dark:text-muted">
-            {factoryAddress ? 'Try refreshing or check if any pools are registered with this factory.' : 'Please set a factory address first.'}
+            ))}
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {pools.map((p, i) => (
-            <div
-              key={`${p.swapPool}-${i}`}
-              className="p-4 sm:p-5 bg-card dark:bg-card rounded-2xl shadow-lg flex flex-col sm:flex-row gap-4 sm:gap-5 items-center transition-transform duration-200 hover:scale-105 hover:shadow-2xl border border-transparent hover:border-accent/30 cursor-pointer"
-              style={{ minHeight: 120 }}
-            >
-              <NFTCollectionImage address={p.nftCollection} size={56} />
-              <div className="flex-1 w-full">
-                <div className="font-semibold text-base sm:text-lg text-accent mb-1">
-                  {poolNames[p.nftCollection] || 'Collection'}
-                  <span className="font-mono text-muted dark:text-muted ml-2">
-                    {p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}
-                  </span>
+        ) : pools.length === 0 ? (
+          <div className="p-8 bg-card/30 rounded-2xl text-center">
+            <div className="text-6xl mb-4">🏊‍♂️</div>
+            <h3 className="text-xl font-semibold mb-2">No Swap Pools Found</h3>
+            <p className="text-muted mb-4">
+              {factoryAddress ? 'No pools are currently registered with this factory.' : 'Please set a factory address first.'}
+            </p>
+            {factoryAddress && (
+              <button 
+                onClick={fetchPools}
+                className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/80 transition-colors"
+              >
+                Refresh Pools
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pools.map((p, i) => (
+              <div
+                key={`${p.swapPool}-${i}`}
+                className="group p-4 sm:p-5 bg-card rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-transparent hover:border-accent/20 cursor-pointer"
+                onClick={() => setSelectedPool(p)}
+              >
+                <div className="flex items-start gap-4 mb-4">
+                  <NFTCollectionImage address={p.nftCollection} size={56} />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg text-accent mb-1 truncate">
+                      {poolNames[p.nftCollection] || 'Loading...'}
+                    </h3>
+                    <p className="text-xs text-muted font-mono truncate">
+                      {p.nftCollection.slice(0, 8)}...{p.nftCollection.slice(-6)}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-xs text-muted dark:text-muted">
-                  Pool: <span className="font-mono">{p.swapPool.slice(0, 8)}...{p.swapPool.slice(-6)}</span>
+
+                <div className="space-y-2 text-xs text-muted mb-4">
+                  <div className="flex justify-between">
+                    <span>Pool:</span>
+                    <span className="font-mono">{p.swapPool.slice(0, 8)}...{p.swapPool.slice(-6)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Receipt:</span>
+                    <span className="font-mono">{p.stakeReceipt.slice(0, 8)}...{p.stakeReceipt.slice(-6)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Created:</span>
+                    <span>{new Date(Number(p.createdAt)).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                <div className="text-xs text-muted dark:text-muted">
-                  Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 8)}...{p.stakeReceipt.slice(-6)}</span>
-                </div>
-                <div className="text-xs text-muted dark:text-muted">
-                  Creator: <span className="font-mono">{p.creator.slice(0, 6)}...{p.creator.slice(-4)}</span>
-                </div>
-                <div className="text-xs text-muted dark:text-muted mt-1">Created: {p.createdAt}</div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button className="px-3 py-1 bg-gradient-to-r from-accent to-indigo-700 text-white rounded shadow hover:from-indigo-600 hover:to-blue-600 transition text-xs" onClick={() => setSelectedPool(p)}>Details</button>
-                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20 text-xs" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Pool</button>
-                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20 text-xs" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
+
+                <div className="flex flex-wrap gap-2">
+                  <button 
+                    className="flex-1 px-3 py-2 bg-gradient-to-r from-accent to-indigo-600 text-white rounded-lg hover:from-accent/80 hover:to-indigo-500 transition-colors text-sm font-medium"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedPool(p)
+                    }}
+                  >
+                    View Details
+                  </button>
+                  <button 
+                    className="px-3 py-2 bg-secondary/50 hover:bg-secondary text-text rounded-lg transition-colors text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigator.clipboard.writeText(p.swapPool)
+                    }}
+                    title="Copy pool address"
+                  >
+                    📋
+                  </button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Pass provider to PoolDetail if open */}
-      {selectedPool && <PoolDetail pool={selectedPool} onClose={() => setSelectedPool(null)} provider={provider} />}
+      {/* Pool Detail Modal */}
+      {selectedPool && (
+        <PoolDetail 
+          pool={selectedPool} 
+          onClose={() => setSelectedPool(null)} 
+          provider={provider} 
+        />
+      )}
     </div>
   )
 }

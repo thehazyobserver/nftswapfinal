@@ -3,23 +3,18 @@ import { ethers } from 'ethers'
 import StonerFeePoolABI from '../abis/StonerFeePool.json'
 import NFTTokenImage from './NFTTokenImage'
 import StonerNFTABI from '../abis/StonerNFT.json'
-import StonerApproveButton from './StonerApproveButton'
 
-// TODO: Replace with your actual StonerFeePool contract address
 const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
-// TODO: Replace with your actual Stoner NFT contract address
 const STONER_NFT_ADDRESS = '0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb'
 
 export default function StonerFeePoolActions() {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
-  const [stakedNFTs, setStakedNFTs] = useState([]) // Add staked NFTs state
-  const [selectedTokens, setSelectedTokens] = useState([]) // Changed to array for batch selection
-  const [selectedStakedTokens, setSelectedStakedTokens] = useState([]) // Add selected staked tokens
-  const [approvedMap, setApprovedMap] = useState({}) // Track individual approvals
+  const [stakedNFTs, setStakedNFTs] = useState([])
+  const [selectedTokens, setSelectedTokens] = useState([])
+  const [selectedStakedTokens, setSelectedStakedTokens] = useState([])
   const [isApprovedForAll, setIsApprovedForAll] = useState(false)
-  const [approvingAll, setApprovingAll] = useState(false)
 
   const getSigner = async () => {
     if (!window.ethereum) throw new Error('Wallet not found')
@@ -27,465 +22,337 @@ export default function StonerFeePoolActions() {
     return provider.getSigner()
   }
 
-  // Batch Stake NFTs
-  const handleStake = async () => {
-    setStatus('')
-    // Preflight checks for batch staking
-    if (selectedTokens.length === 0) {
-      setStatus('Select at least one NFT to stake.')
-      return
-    }
-    if (selectedTokens.length > 10) {
-      setStatus('You can only stake up to 10 NFTs at once.')
-      return
-    }
-    // Check for duplicates
-    const unique = new Set(selectedTokens)
-    if (unique.size !== selectedTokens.length) {
-      setStatus('Duplicate NFTs selected. Please select each NFT only once.')
-      return
-    }
-    // Check all are approved (either individually or via setApprovalForAll)
-    if (!isApprovedForAll && !selectedTokens.every(tid => approvedMap[tid])) {
-      setStatus('All selected NFTs must be approved before staking.')
-      return
-    }
-    
-    setLoading(true)
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
-      
-      let tx
-      if (selectedTokens.length > 1) {
-        tx = await contract.stakeMultiple(selectedTokens)
-      } else {
-        tx = await contract.stake(selectedTokens[0])
-      }
-      setStatus('Staking...')
-      await tx.wait()
-      setStatus('Stake successful!')
-      setSelectedTokens([]) // Clear selection after successful stake
-    } catch (e) {
-      setStatus('Stake failed: ' + (e.reason || e.message))
-      console.error('Stake error', e)
-    }
-    setLoading(false)
-  }
-
-  // Batch Unstake NFTs
-  const handleUnstake = async () => {
-    setStatus('')
-    if (selectedStakedTokens.length === 0) {
-      setStatus('Select at least one staked NFT to unstake.')
-      return
-    }
-    if (selectedStakedTokens.length > 10) {
-      setStatus('You can only unstake up to 10 NFTs at once.')
-      return
-    }
-
-    setLoading(true)
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
-      
-      let tx
-      if (selectedStakedTokens.length > 1) {
-        tx = await contract.unstakeMultiple(selectedStakedTokens)
-      } else {
-        tx = await contract.unstake(selectedStakedTokens[0])
-      }
-      setStatus('Unstaking...')
-      await tx.wait()
-      setStatus('Unstake successful!')
-      setSelectedStakedTokens([]) // Clear selection after successful unstake
-    } catch (e) {
-      setStatus('Unstake failed: ' + (e.reason || e.message))
-      console.error('Unstake error', e)
-    }
-    setLoading(false)
-  }
-
-  // Fetch user's Stoner NFTs and approval for all
+  // Fetch NFTs
   useEffect(() => {
     const fetchNFTs = async () => {
       if (!window.ethereum) return
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const addr = await signer.getAddress()
+      
       try {
-        // Use full ABI for custom enumeration
-        const nftContract = new ethers.Contract(
-          STONER_NFT_ADDRESS,
-          StonerNFTABI,
-          provider
-        )
-        // Check isApprovedForAll
-        let approvedAll = false
-        try {
-          approvedAll = await nftContract.isApprovedForAll(addr, STONER_FEE_POOL_ADDRESS)
-        } catch {}
-        setIsApprovedForAll(!!approvedAll)
-
-        let tokens = []
-        let count = 0
-        try {
-          count = await nftContract.totalNFTsOwned(addr)
-        } catch {
-          // fallback to balanceOf
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
+        const addr = await signer.getAddress()
+        
+        const nftContract = new ethers.Contract(STONER_NFT_ADDRESS, StonerNFTABI, provider)
+        const feePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
+        
+        // Check approval
+        const approvedAll = await nftContract.isApprovedForAll(addr, STONER_FEE_POOL_ADDRESS)
+        setIsApprovedForAll(approvedAll)
+        
+        // Get wallet NFTs
+        const balance = await nftContract.balanceOf(addr)
+        const walletTokens = []
+        
+        for (let i = 0; i < Math.min(Number(balance), 20); i++) {
           try {
-            count = await nftContract.balanceOf(addr)
-          } catch {
-            count = 0
-          }
-        }
-        count = Number(count)
-        let usedFallback = false
-        const approvedMapTemp = {}
-        for (let i = 0; i < count; i++) {
-          let tokenId = null
-          try {
-            tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
-          } catch (err) {
-            // tokenOfOwnerByIndex not supported
-            usedFallback = true
-            break
-          }
-          let image = null
-          let approved = false
-          try {
-            console.log('Fetching metadata for Stoner NFT token:', tokenId);
-            let uri = await nftContract.tokenURI(tokenId)
-            console.log('Token URI:', uri);
-            
-            if (uri.startsWith('ipfs://')) {
-              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-            }
-            if (uri.startsWith('http')) {
-              console.log('Fetching metadata from:', uri);
-              const resp = await fetch(uri)
-              if (!resp.ok) {
-                throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-              }
-              const meta = await resp.json()
-              console.log('Metadata response:', meta);
-              
-              image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-              if (image && image.startsWith('ipfs://')) {
-                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-              }
-              console.log('Processed image URL:', image);
-              
-              if (!image) {
-                console.warn('No image field in metadata for token', tokenId, meta, uri)
-              }
-            } else {
-              console.warn('tokenURI is not http(s) for token', tokenId, ':', uri)
-            }
-            // Check individual approval
-            if (approvedAll) {
-              approved = true
-            } else {
-              const approvedAddr = await nftContract.getApproved(tokenId)
-              approved = approvedAddr && STONER_FEE_POOL_ADDRESS && approvedAddr.toLowerCase() === STONER_FEE_POOL_ADDRESS.toLowerCase()
-            }
-          } catch (err) {
-            console.error('Failed to fetch NFT metadata/image for token', tokenId, err)
-          }
-          tokens.push({ tokenId: tokenId?.toString(), image })
-          approvedMapTemp[tokenId?.toString()] = approved
-        }
-        // Fallback: scan a range of tokenIds if tokenOfOwnerByIndex is not supported
-        if (usedFallback && count > 0) {
-          console.warn('tokenOfOwnerByIndex not supported, using fallback scan for Stoner NFTs')
-          // Try scanning tokenIds 0..(max 10000)
-          let found = 0
-          for (let tokenId = 0; tokenId < Math.min(10000, count + 100); tokenId++) {
-            try {
-              const owner = await nftContract.ownerOf(tokenId)
-              if (owner && owner.toLowerCase() === addr.toLowerCase()) {
-                console.log('Found owned Stoner NFT token (fallback scan):', tokenId);
-                let image = null
-                let approved = false
-                try {
-                  let uri = await nftContract.tokenURI(tokenId)
-                  console.log('Fallback: Token URI for', tokenId, ':', uri);
-                  
-                  if (uri.startsWith('ipfs://')) {
-                    uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                  if (uri.startsWith('http')) {
-                    console.log('Fallback: Fetching metadata from:', uri);
-                    const resp = await fetch(uri)
-                    if (!resp.ok) {
-                      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-                    }
-                    const meta = await resp.json()
-                    console.log('Fallback: Metadata for token', tokenId, ':', meta);
-                    
-                    image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-                    if (image && image.startsWith('ipfs://')) {
-                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                    }
-                    console.log('Fallback: Processed image URL for token', tokenId, ':', image);
-                  }
-                  // Check individual approval in fallback
-                  if (approvedAll) {
-                    approved = true
-                  } else {
-                    const approvedAddr = await nftContract.getApproved(tokenId)
-                    approved = approvedAddr && STONER_FEE_POOL_ADDRESS && approvedAddr.toLowerCase() === STONER_FEE_POOL_ADDRESS.toLowerCase()
-                  }
-                } catch (err) {
-                  console.error('Fallback: Failed to fetch metadata for token', tokenId, err);
-                }
-                tokens.push({ tokenId: tokenId.toString(), image })
-                approvedMapTemp[tokenId.toString()] = approved
-                found++
-                if (found >= count) break
-              }
-            } catch (err) {
-              // Token doesn't exist or other error, continue scanning
-            }
-          }
-        }
-        console.log('Final Stoner NFT tokens array:', tokens);
-        console.log('Final approval map:', approvedMapTemp);
-        setWalletNFTs(tokens)
-        setApprovedMap(approvedMapTemp)
-
-        // Fetch staked NFTs
-        try {
-          const stonerFeePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
-          const stakedTokenIds = await stonerFeePoolContract.getStakedTokens(addr)
-          console.log('Staked token IDs:', stakedTokenIds);
-          
-          const stakedTokens = []
-          for (const tokenId of stakedTokenIds) {
+            const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
             let image = null
+            
             try {
               let uri = await nftContract.tokenURI(tokenId)
-              console.log('Staked token URI for', tokenId, ':', uri);
-              
               if (uri.startsWith('ipfs://')) {
                 uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
               if (uri.startsWith('http')) {
                 const resp = await fetch(uri)
-                if (resp.ok) {
-                  const meta = await resp.json()
-                  image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-                  if (image && image.startsWith('ipfs://')) {
-                    image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
+                const meta = await resp.json()
+                image = meta.image || meta.image_url
+                if (image && image.startsWith('ipfs://')) {
+                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
                 }
               }
-            } catch (err) {
-              console.error('Failed to fetch staked NFT metadata for token', tokenId, err);
+            } catch (e) {
+              console.warn('Failed to fetch metadata for token', tokenId.toString())
             }
+            
+            walletTokens.push({ tokenId: tokenId.toString(), image })
+          } catch (e) {
+            break
+          }
+        }
+        
+        setWalletNFTs(walletTokens)
+        
+        // Get staked NFTs
+        try {
+          const stakedTokenIds = await feePoolContract.getStakedTokens(addr)
+          const stakedTokens = []
+          
+          for (const tokenId of stakedTokenIds) {
+            let image = null
+            try {
+              let uri = await nftContract.tokenURI(tokenId)
+              if (uri.startsWith('ipfs://')) {
+                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              if (uri.startsWith('http')) {
+                const resp = await fetch(uri)
+                const meta = await resp.json()
+                image = meta.image || meta.image_url
+                if (image && image.startsWith('ipfs://')) {
+                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+              }
+            } catch (e) {
+              console.warn('Failed to fetch metadata for staked token', tokenId.toString())
+            }
+            
             stakedTokens.push({ tokenId: tokenId.toString(), image })
           }
           
-          console.log('Final staked tokens array:', stakedTokens);
           setStakedNFTs(stakedTokens)
         } catch (e) {
-          console.error('Error fetching staked Stoner NFTs:', e);
-          setStakedNFTs([])
+          console.warn('Failed to fetch staked NFTs:', e)
         }
+        
       } catch (e) {
-        console.error('Error fetching Stoner NFTs:', e);
-        setWalletNFTs([])
-        setApprovedMap({})
-        setStakedNFTs([])
+        console.error('Failed to fetch NFTs:', e)
       }
     }
+    
     fetchNFTs()
   }, [])
 
-  // Claim rewards
-  const handleClaim = async () => {
-    setStatus('')
+  // Handle stake
+  const handleStake = async () => {
+    if (selectedTokens.length === 0) {
+      setStatus('Select NFTs to stake first')
+      return
+    }
+    
     setLoading(true)
+    setStatus('')
+    
+    try {
+      const signer = await getSigner()
+      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
+      
+      let tx
+      if (selectedTokens.length === 1) {
+        tx = await contract.stake(selectedTokens[0])
+      } else {
+        tx = await contract.stakeMultiple(selectedTokens)
+      }
+      
+      setStatus('Staking...')
+      await tx.wait()
+      setStatus('Staking successful!')
+      setSelectedTokens([])
+    } catch (e) {
+      setStatus('Staking failed: ' + (e.reason || e.message))
+    }
+    
+    setLoading(false)
+  }
+
+  // Handle unstake
+  const handleUnstake = async () => {
+    if (selectedStakedTokens.length === 0) {
+      setStatus('Select staked NFTs to unstake first')
+      return
+    }
+    
+    setLoading(true)
+    setStatus('')
+    
+    try {
+      const signer = await getSigner()
+      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
+      
+      let tx
+      if (selectedStakedTokens.length === 1) {
+        tx = await contract.unstake(selectedStakedTokens[0])
+      } else {
+        tx = await contract.unstakeMultiple(selectedStakedTokens)
+      }
+      
+      setStatus('Unstaking...')
+      await tx.wait()
+      setStatus('Unstaking successful!')
+      setSelectedStakedTokens([])
+    } catch (e) {
+      setStatus('Unstaking failed: ' + (e.reason || e.message))
+    }
+    
+    setLoading(false)
+  }
+
+  // Handle claim
+  const handleClaim = async () => {
+    setLoading(true)
+    setStatus('')
+    
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
       const tx = await contract.claimAllRewards()
       setStatus('Claiming rewards...')
       await tx.wait()
-      setStatus('Rewards claimed!')
+      setStatus('Rewards claimed successfully!')
     } catch (e) {
       setStatus('Claim failed: ' + (e.reason || e.message))
-      console.error('Claim error', e)
     }
+    
+    setLoading(false)
+  }
+
+  // Handle approval
+  const handleApproveAll = async () => {
+    setLoading(true)
+    
+    try {
+      const signer = await getSigner()
+      const contract = new ethers.Contract(STONER_NFT_ADDRESS, ['function setApprovalForAll(address,bool) external'], signer)
+      const tx = await contract.setApprovalForAll(STONER_FEE_POOL_ADDRESS, true)
+      await tx.wait()
+      setIsApprovedForAll(true)
+      setStatus('Approval successful!')
+    } catch (e) {
+      setStatus('Approval failed: ' + (e.reason || e.message))
+    }
+    
     setLoading(false)
   }
 
   return (
-    <div className="mt-8 p-4 sm:p-6 bg-secondary dark:bg-secondary rounded-2xl shadow-xl border border-accent/10">
-      <h3 className="font-bold text-lg mb-4 text-accent tracking-wide">StonerFeePool Staking & Rewards</h3>
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold text-green-400">Stake Stoner NFT</div>
-          <div className="flex items-center gap-2">
-            <div className={`text-xs px-2 py-1 rounded ${selectedTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedTokens.length > 0 ? 'bg-green-900/30 text-green-300' : 'bg-gray-800/30 text-gray-400'}`}>
-              📊 {selectedTokens.length}/10 selected
-            </div>
-            <div className="text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
-              📦 Max 10 NFTs per batch
-            </div>
+    <div className="p-6 bg-card/60 rounded-2xl shadow-xl border border-accent/10 backdrop-blur-sm space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-lg">🌿</span>
+          </div>
+          <div>
+            <h3 className="font-bold text-xl text-green-400">Stoner NFT Staking</h3>
+            <p className="text-sm text-muted">Stake your Stoner NFTs to earn rewards</p>
           </div>
         </div>
-        <div className="flex gap-3 flex-wrap">
-          {walletNFTs.length === 0 ? (
-            <div className="w-full p-6 bg-secondary/50 rounded-lg text-center">
-              <div className="text-3xl mb-2">🔍</div>
-              <div className="text-muted dark:text-muted mb-1">No Stoner NFTs found</div>
-              <div className="text-sm text-muted dark:text-muted">
-                Connect your wallet and make sure you own some Stoner NFTs to stake them here.
-              </div>
-            </div>
-          ) : (
-            walletNFTs.map(nft => (
-              <div key={nft.tokenId} className="flex flex-col items-center">
-                <button 
-                  className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${
-                    selectedTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'
-                  } text-text`} 
-                  onClick={() => setSelectedTokens(tokens => 
-                    tokens.includes(nft.tokenId) 
-                      ? tokens.filter(t => t !== nft.tokenId) 
-                      : [...tokens, nft.tokenId]
-                  )} 
-                  disabled={loading}
-                >
-                  <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                  <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
-                </button>
-                {!isApprovedForAll && (
-                  <StonerApproveButton 
-                    tokenId={nft.tokenId} 
-                    onApproved={() => setApprovedMap(m => ({ ...m, [nft.tokenId]: true }))} 
-                    disabled={loading || approvedMap[nft.tokenId]} 
-                  />
-                )}
-              </div>
-            ))
-          )}
+        <button 
+          onClick={handleClaim}
+          disabled={loading}
+          className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-all disabled:opacity-50 font-medium"
+        >
+          Claim Rewards
+        </button>
+      </div>
+
+      {status && (
+        <div className={`p-3 rounded-lg ${
+          status.includes('successful') || status.includes('claimed') 
+            ? 'bg-green-900/20 border border-green-500/20 text-green-400'
+            : status.includes('failed') || status.includes('error')
+            ? 'bg-red-900/20 border border-red-500/20 text-red-400'
+            : 'bg-blue-900/20 border border-blue-500/20 text-blue-400'
+        }`}>
+          {status}
         </div>
-        <div className="flex items-center mt-3 gap-3">
-          <button 
-            className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2" 
-            onClick={handleStake} 
-            disabled={loading || selectedTokens.length === 0 || (!isApprovedForAll && !selectedTokens.every(tid => approvedMap[tid]))}
-          >
-            {loading && (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Stake Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-green-400">Stake NFTs ({selectedTokens.length} selected)</h4>
+            {!isApprovedForAll && (
+              <button
+                onClick={handleApproveAll}
+                disabled={loading}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+              >
+                Approve All
+              </button>
             )}
-            {loading ? 'Staking...' : `Stake Selected (${selectedTokens.length})`}
-          </button>
-          {!isApprovedForAll && (
-            <button 
-              className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50 flex items-center gap-2" 
-              disabled={approvingAll || loading} 
-              onClick={async () => {
-                setApprovingAll(true)
-                try {
-                  if (!window.ethereum) throw new Error('Wallet not found')
-                  const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner()
-                  const nft = new ethers.Contract(STONER_NFT_ADDRESS, ["function setApprovalForAll(address,bool) external"], signer)
-                  const tx = await nft.setApprovalForAll(STONER_FEE_POOL_ADDRESS, true)
-                  await tx.wait()
-                  setIsApprovedForAll(true)
-                  // Update all approvals to true
-                  setApprovedMap(m => {
-                    const all = { ...m }
-                    walletNFTs.forEach(nft => { all[nft.tokenId] = true })
-                    return all
-                  })
-                } catch (e) {
-                  alert(e.reason || e.message)
-                }
-                setApprovingAll(false)
-              }}
-            >
-              {approvingAll && (
-                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              )}
-              {approvingAll ? 'Approving...' : 'Approve All'}
-            </button>
-          )}
-          {isApprovedForAll && <span className="text-green-400 font-semibold text-xs ml-2">All Approved</span>}
-        </div>
-      </div>
-
-      {/* Staked NFTs Section */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold text-blue-400">Your Staked Stoner NFTs</div>
-          <div className="flex items-center gap-2">
-            <div className={`text-xs px-2 py-1 rounded ${selectedStakedTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedStakedTokens.length > 0 ? 'bg-blue-900/30 text-blue-300' : 'bg-gray-800/30 text-gray-400'}`}>
-              📊 {selectedStakedTokens.length}/10 selected
-            </div>
-            <div className="text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
-              📦 Max 10 NFTs per batch
-            </div>
           </div>
-        </div>
-        <div className="flex gap-3 flex-wrap">
-          {stakedNFTs.length === 0 ? (
-            <div className="w-full p-6 bg-secondary/50 rounded-lg text-center">
-              <div className="text-3xl mb-2">💤</div>
-              <div className="text-muted dark:text-muted mb-1">No staked NFTs</div>
-              <div className="text-sm text-muted dark:text-muted">
-                Stake some Stoner NFTs above to start earning rewards!
-              </div>
+
+          {walletNFTs.length === 0 ? (
+            <div className="p-6 bg-card/30 rounded-xl text-center">
+              <div className="text-4xl mb-3">🔍</div>
+              <p className="text-muted">No Stoner NFTs found in wallet</p>
             </div>
           ) : (
-            stakedNFTs.map(nft => (
-              <div key={nft.tokenId} className="flex flex-col items-center">
-                <button 
-                  className={`border-2 rounded-xl p-1 bg-gradient-to-br from-blue-900/20 to-card shadow-sm transition-all ${
-                    selectedStakedTokens.includes(nft.tokenId) ? 'border-blue-400 scale-105' : 'border-gray-700 hover:border-blue-400'
-                  } text-text`} 
-                  onClick={() => setSelectedStakedTokens(tokens => 
-                    tokens.includes(nft.tokenId) 
-                      ? tokens.filter(t => t !== nft.tokenId) 
-                      : [...tokens, nft.tokenId]
-                  )} 
-                  disabled={loading}
-                >
-                  <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                  <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
-                  <div className="text-xs text-center text-blue-400 font-semibold">STAKED</div>
-                </button>
+            <>
+              <div className="grid grid-cols-4 gap-3">
+                {walletNFTs.slice(0, 12).map((nft) => (
+                  <div
+                    key={nft.tokenId}
+                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${
+                      selectedTokens.includes(nft.tokenId)
+                        ? 'border-green-400 bg-green-400/10'
+                        : 'border-transparent hover:border-accent/30'
+                    }`}
+                    onClick={() => {
+                      if (selectedTokens.includes(nft.tokenId)) {
+                        setSelectedTokens(prev => prev.filter(id => id !== nft.tokenId))
+                      } else {
+                        setSelectedTokens(prev => [...prev, nft.tokenId])
+                      }
+                    }}
+                  >
+                    <div className="aspect-square p-2">
+                      <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size="100%" />
+                    </div>
+                    <div className="text-xs text-center p-1">#{nft.tokenId}</div>
+                  </div>
+                ))}
               </div>
-            ))
+              
+              <button
+                onClick={handleStake}
+                disabled={loading || selectedTokens.length === 0 || !isApprovedForAll}
+                className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg disabled:opacity-50"
+              >
+                {loading ? 'Staking...' : `Stake ${selectedTokens.length} NFT${selectedTokens.length !== 1 ? 's' : ''}`}
+              </button>
+            </>
           )}
         </div>
-        {stakedNFTs.length > 0 && (
-          <div className="flex items-center mt-3 gap-3">
-            <button 
-              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2" 
-              onClick={handleUnstake} 
-              disabled={loading || selectedStakedTokens.length === 0}
-            >
-              {loading && (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              )}
-              {loading ? 'Unstaking...' : `Unstake Selected (${selectedStakedTokens.length})`}
-            </button>
-          </div>
-        )}
-      </div>
 
-      <div className="mb-4">
-        <div className="font-semibold mb-2 text-yellow-400">Claim Rewards</div>
-        <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleClaim} disabled={loading}>Claim Rewards</button>
+        {/* Unstake Section */}
+        <div className="space-y-4">
+          <h4 className="font-semibold text-blue-400">Unstake NFTs ({selectedStakedTokens.length} selected)</h4>
+
+          {stakedNFTs.length === 0 ? (
+            <div className="p-6 bg-card/30 rounded-xl text-center">
+              <div className="text-4xl mb-3">📦</div>
+              <p className="text-muted">No staked NFTs</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-4 gap-3">
+                {stakedNFTs.slice(0, 12).map((nft) => (
+                  <div
+                    key={nft.tokenId}
+                    className={`relative cursor-pointer rounded-lg border-2 transition-all ${
+                      selectedStakedTokens.includes(nft.tokenId)
+                        ? 'border-blue-400 bg-blue-400/10'
+                        : 'border-transparent hover:border-accent/30'
+                    }`}
+                    onClick={() => {
+                      if (selectedStakedTokens.includes(nft.tokenId)) {
+                        setSelectedStakedTokens(prev => prev.filter(id => id !== nft.tokenId))
+                      } else {
+                        setSelectedStakedTokens(prev => [...prev, nft.tokenId])
+                      }
+                    }}
+                  >
+                    <div className="aspect-square p-2">
+                      <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size="100%" />
+                    </div>
+                    <div className="text-xs text-center p-1">#{nft.tokenId}</div>
+                  </div>
+                ))}
+              </div>
+              
+              <button
+                onClick={handleUnstake}
+                disabled={loading || selectedStakedTokens.length === 0}
+                className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg disabled:opacity-50"
+              >
+                {loading ? 'Unstaking...' : `Unstake ${selectedStakedTokens.length} NFT${selectedStakedTokens.length !== 1 ? 's' : ''}`}
+              </button>
+            </>
+          )}
+        </div>
       </div>
-      {status && <div className="text-accent text-base font-semibold animate-pulse">{status}</div>}
     </div>
   )
 }
