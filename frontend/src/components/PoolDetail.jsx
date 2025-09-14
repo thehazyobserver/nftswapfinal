@@ -4,11 +4,18 @@ import NFTCollectionImage from './NFTCollectionImage'
 
 export default function PoolDetail({ pool, onClose, provider }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-card dark:bg-card w-11/12 md:w-2/3 lg:w-1/2 p-4 sm:p-6 rounded-2xl shadow-xl border border-accent/10">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold text-accent">Pool Details</h3>
-          <button className="text-muted dark:text-muted hover:text-accent" onClick={onClose}>Close</button>
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-card dark:bg-card w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl shadow-xl border border-accent/10">
+        <div className="sticky top-0 bg-card dark:bg-card pb-4 mb-4 border-b border-accent/10">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold text-accent">Pool Details</h3>
+            <button 
+              className="text-muted dark:text-muted hover:text-accent px-3 py-1 rounded hover:bg-secondary transition flex-shrink-0"
+              onClick={onClose}
+            >
+              ✕ Close
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">

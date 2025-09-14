@@ -15,6 +15,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   const [approvingAll, setApprovingAll] = useState(false)
   const [stakedNFTs, setStakedNFTs] = useState([])
   const [receiptNFTs, setReceiptNFTs] = useState([])
+  const [poolNFTs, setPoolNFTs] = useState([]) // Add pool NFTs state
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
   const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
   const [selectedSwapToken, setSelectedSwapToken] = useState(null)
@@ -195,6 +196,50 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         console.error('Failed to fetch receipt NFTs:', e)
         setReceiptNFTs([])
       }
+      
+      // Fetch pool NFTs (available for swapping)
+      try {
+        const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
+        const poolTokenIds = await pool.getPoolTokens()
+        console.log('Pool token IDs available for swap:', poolTokenIds)
+        
+        if (collectionAddr && poolTokenIds.length > 0) {
+          const nftContract = new ethers.Contract(collectionAddr, [
+            "function tokenURI(uint256) view returns (string)"
+          ], provider)
+          
+          const tokens = []
+          for (const tokenId of poolTokenIds) {
+            let image = null
+            try {
+              let uri = await nftContract.tokenURI(tokenId)
+              if (uri && uri.startsWith('ipfs://')) {
+                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              if (uri && uri.startsWith('http')) {
+                const resp = await fetch(uri)
+                if (resp.ok) {
+                  const meta = await resp.json()
+                  image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                  if (image && image.startsWith('ipfs://')) {
+                    image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('Failed to fetch pool NFT metadata for token', tokenId, err)
+            }
+            tokens.push({ tokenId: tokenId.toString(), image })
+          }
+          setPoolNFTs(tokens)
+          console.log('Pool NFTs fetched:', tokens)
+        } else {
+          setPoolNFTs([])
+        }
+      } catch (e) {
+        console.error('Failed to fetch pool NFTs:', e)
+        setPoolNFTs([])
+      }
     }
     fetchNFTs()
     // eslint-disable-next-line
@@ -292,19 +337,73 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
 
   // Swap NFT
   const handleSwap = async () => {
+    if (!selectedSwapToken) {
+      setStatus('Please select an NFT to swap')
+      return
+    }
+    
     setStatus('')
     setLoading(true)
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
+      
+      // First, approve the NFT for transfer if not already approved
+      const nftContract = new ethers.Contract(collectionAddr, [
+        "function approve(address,uint256)",
+        "function getApproved(uint256) view returns (address)",
+        "function ownerOf(uint256) view returns (address)"
+      ], signer)
+      
+      // Check if user owns the token
+      const owner = await nftContract.ownerOf(selectedSwapToken)
+      const userAddr = await signer.getAddress()
+      if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+        setStatus('You do not own this NFT')
+        setLoading(false)
+        return
+      }
+      
+      // Check if already approved
+      const approved = await nftContract.getApproved(selectedSwapToken)
+      if (approved.toLowerCase() !== swapPool.toLowerCase()) {
+        setStatus('Approving NFT for swap...')
+        const approveTx = await nftContract.approve(swapPool, selectedSwapToken)
+        await approveTx.wait()
+      }
+      
       // Get swap fee
       const fee = await contract.swapFeeInWei()
+      setStatus('Swapping NFT...')
       const tx = await contract.swapNFT(selectedSwapToken, { value: fee })
-      setStatus('Swapping...')
       await tx.wait()
-      setStatus('Swap successful!')
+      setStatus('✅ Swap successful!')
+      
+      // Refresh NFT lists
+      fetchUserNFTs()
+      fetchPoolTokens()
+      setSelectedSwapToken('')
+      
     } catch (e) {
-      setStatus('Swap failed: ' + (e.reason || e.message))
+      console.error('Swap error:', e)
+      const errorMessage = e.reason || e.message || 'Unknown error'
+      
+      // Handle specific contract errors
+      if (errorMessage.includes('TokenNotApproved')) {
+        setStatus('❌ NFT not approved for transfer')
+      } else if (errorMessage.includes('NotTokenOwner')) {
+        setStatus('❌ You do not own this NFT')
+      } else if (errorMessage.includes('SameTokenSwap')) {
+        setStatus('❌ Cannot swap for the same token')
+      } else if (errorMessage.includes('NoTokensAvailable')) {
+        setStatus('❌ No tokens available in the pool')
+      } else if (errorMessage.includes('IncorrectFee')) {
+        setStatus('❌ Incorrect swap fee sent')
+      } else if (errorMessage.includes('InsufficientLiquidity')) {
+        setStatus('❌ Insufficient liquidity in pool')
+      } else {
+        setStatus('❌ Swap failed: ' + errorMessage)
+      }
     }
     setLoading(false)
   }
@@ -382,7 +481,31 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleClaim} disabled={loading}>Claim</button>
         </div>
         <div>
-          <div className="font-semibold mb-2 text-indigo-400">Swap NFT</div>
+          <div className="font-semibold mb-2 text-purple-400">Pool NFTs Available for Swap</div>
+          <div className="flex gap-3 flex-wrap">
+            {poolNFTs.length === 0 ? (
+              <div className="w-full p-4 bg-secondary/50 rounded-lg text-center">
+                <div className="text-2xl mb-2">🏊‍♂️</div>
+                <div className="text-muted dark:text-muted mb-1">No NFTs in pool</div>
+                <div className="text-sm text-muted dark:text-muted">
+                  The pool is empty. Stake some NFTs to add them to the pool!
+                </div>
+              </div>
+            ) : (
+              poolNFTs.map(nft => (
+                <div key={nft.tokenId} className="flex flex-col items-center">
+                  <div className="border-2 border-purple-600/50 rounded-xl p-1 bg-gradient-to-br from-purple-900/20 to-card shadow-sm">
+                    <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
+                    <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
+                    <div className="text-xs text-center text-purple-400 font-semibold">AVAILABLE</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold mb-2 text-indigo-400">Swap Your NFT</div>
           <div className="flex gap-3 flex-wrap">
             {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (

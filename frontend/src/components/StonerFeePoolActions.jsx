@@ -14,7 +14,9 @@ export default function StonerFeePoolActions() {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
+  const [stakedNFTs, setStakedNFTs] = useState([]) // Add staked NFTs state
   const [selectedTokens, setSelectedTokens] = useState([]) // Changed to array for batch selection
+  const [selectedStakedTokens, setSelectedStakedTokens] = useState([]) // Add selected staked tokens
   const [approvedMap, setApprovedMap] = useState({}) // Track individual approvals
   const [isApprovedForAll, setIsApprovedForAll] = useState(false)
   const [approvingAll, setApprovingAll] = useState(false)
@@ -71,6 +73,42 @@ export default function StonerFeePoolActions() {
     }
     setLoading(false)
   }
+
+  // Batch Unstake NFTs
+  const handleUnstake = async () => {
+    setStatus('')
+    if (selectedStakedTokens.length === 0) {
+      setStatus('Select at least one staked NFT to unstake.')
+      return
+    }
+    if (selectedStakedTokens.length > 10) {
+      setStatus('You can only unstake up to 10 NFTs at once.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
+      
+      let tx
+      if (selectedStakedTokens.length > 1) {
+        tx = await contract.unstakeMultiple(selectedStakedTokens)
+      } else {
+        tx = await contract.unstake(selectedStakedTokens[0])
+      }
+      setStatus('Unstaking...')
+      await tx.wait()
+      setStatus('Unstake successful!')
+      setSelectedStakedTokens([]) // Clear selection after successful unstake
+    } catch (e) {
+      setStatus('Unstake failed: ' + (e.reason || e.message))
+      console.error('Unstake error', e)
+    }
+    setLoading(false)
+  }
+
   // Fetch user's Stoner NFTs and approval for all
   useEffect(() => {
     const fetchNFTs = async () => {
@@ -218,10 +256,50 @@ export default function StonerFeePoolActions() {
         console.log('Final approval map:', approvedMapTemp);
         setWalletNFTs(tokens)
         setApprovedMap(approvedMapTemp)
+
+        // Fetch staked NFTs
+        try {
+          const stonerFeePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
+          const stakedTokenIds = await stonerFeePoolContract.getStakedTokens(addr)
+          console.log('Staked token IDs:', stakedTokenIds);
+          
+          const stakedTokens = []
+          for (const tokenId of stakedTokenIds) {
+            let image = null
+            try {
+              let uri = await nftContract.tokenURI(tokenId)
+              console.log('Staked token URI for', tokenId, ':', uri);
+              
+              if (uri.startsWith('ipfs://')) {
+                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              if (uri.startsWith('http')) {
+                const resp = await fetch(uri)
+                if (resp.ok) {
+                  const meta = await resp.json()
+                  image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                  if (image && image.startsWith('ipfs://')) {
+                    image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Failed to fetch staked NFT metadata for token', tokenId, err);
+            }
+            stakedTokens.push({ tokenId: tokenId.toString(), image })
+          }
+          
+          console.log('Final staked tokens array:', stakedTokens);
+          setStakedNFTs(stakedTokens)
+        } catch (e) {
+          console.error('Error fetching staked Stoner NFTs:', e);
+          setStakedNFTs([])
+        }
       } catch (e) {
         console.error('Error fetching Stoner NFTs:', e);
         setWalletNFTs([])
         setApprovedMap({})
+        setStakedNFTs([])
       }
     }
     fetchNFTs()
@@ -332,6 +410,57 @@ export default function StonerFeePoolActions() {
           {isApprovedForAll && <span className="text-green-400 font-semibold text-xs ml-2">All Approved</span>}
         </div>
       </div>
+
+      {/* Staked NFTs Section */}
+      <div className="mb-6">
+        <div className="font-semibold mb-2 text-blue-400">Your Staked Stoner NFTs</div>
+        <div className="flex gap-3 flex-wrap">
+          {stakedNFTs.length === 0 ? (
+            <div className="w-full p-6 bg-secondary/50 rounded-lg text-center">
+              <div className="text-3xl mb-2">💤</div>
+              <div className="text-muted dark:text-muted mb-1">No staked NFTs</div>
+              <div className="text-sm text-muted dark:text-muted">
+                Stake some Stoner NFTs above to start earning rewards!
+              </div>
+            </div>
+          ) : (
+            stakedNFTs.map(nft => (
+              <div key={nft.tokenId} className="flex flex-col items-center">
+                <button 
+                  className={`border-2 rounded-xl p-1 bg-gradient-to-br from-blue-900/20 to-card shadow-sm transition-all ${
+                    selectedStakedTokens.includes(nft.tokenId) ? 'border-blue-400 scale-105' : 'border-gray-700 hover:border-blue-400'
+                  } text-text`} 
+                  onClick={() => setSelectedStakedTokens(tokens => 
+                    tokens.includes(nft.tokenId) 
+                      ? tokens.filter(t => t !== nft.tokenId) 
+                      : [...tokens, nft.tokenId]
+                  )} 
+                  disabled={loading}
+                >
+                  <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
+                  <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
+                  <div className="text-xs text-center text-blue-400 font-semibold">STAKED</div>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        {stakedNFTs.length > 0 && (
+          <div className="flex items-center mt-3 gap-3">
+            <button 
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2" 
+              onClick={handleUnstake} 
+              disabled={loading || selectedStakedTokens.length === 0}
+            >
+              {loading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
+              {loading ? 'Unstaking...' : `Unstake Selected (${selectedStakedTokens.length})`}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="mb-4">
         <div className="font-semibold mb-2 text-yellow-400">Claim Rewards</div>
         <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleClaim} disabled={loading}>Claim Rewards</button>
