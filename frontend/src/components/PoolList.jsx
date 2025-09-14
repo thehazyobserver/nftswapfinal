@@ -161,6 +161,12 @@ export default function PoolList() {
     setLoading(false)
   }
 
+  // Auto-load pools on mount
+  useEffect(() => {
+    fetchPools();
+    // eslint-disable-next-line
+  }, [provider, factoryAddress]);
+
   return (
     <div>
       <StonerFeePoolActions />
@@ -170,16 +176,13 @@ export default function PoolList() {
           <button className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition w-full sm:w-auto" onClick={connect}>
             {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
           </button>
-          <button className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 transition w-full sm:w-auto" onClick={fetchPools}>
-            {loading ? 'Loading…' : 'Load Pools'}
-          </button>
         </div>
       </div>
 
       {pools.length === 0 ? (
-  <div className="p-6 bg-card rounded shadow text-center text-muted dark:text-muted">No pools loaded. Click "Load Pools".</div>
+        <div className="p-6 bg-card rounded shadow text-center text-muted dark:text-muted">No pools loaded.</div>
       ) : (
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {pools.map((p, i) => (
             <div
               key={i}
