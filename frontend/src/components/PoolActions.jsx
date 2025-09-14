@@ -4,7 +4,7 @@ import SwapPoolABI from '../abis/SwapPool.json'
 import StakeReceiptABI from '../abis/StakeReceipt.json'
 import NFTTokenImage from './NFTTokenImage'
 
-export default function PoolActions({ swapPool, stakeReceipt }) {
+export default function PoolActions({ swapPool, stakeReceipt, provider: externalProvider }) {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
@@ -25,10 +25,16 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
   // Fetch user's NFTs and staked/receipt tokens
   useEffect(() => {
     const fetchNFTs = async () => {
-      if (!window.ethereum) return
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const addr = await signer.getAddress()
+      // Use externalProvider for read-only, fallback to window.ethereum if not provided
+      const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
+      if (!provider) return
+      let addr = null
+      if (window.ethereum) {
+        try {
+          const signer = await provider.getSigner()
+          addr = await signer.getAddress()
+        } catch {}
+      }
       setAddress(addr)
       // Fetch wallet NFTs (ERC721)
       try {
@@ -37,81 +43,87 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
           ["function balanceOf(address) view returns (uint256)", "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", "function tokenURI(uint256) view returns (string)"],
           provider
         )
-        const balance = await nftContract.balanceOf(addr)
-        const tokens = []
-        for (let i = 0; i < Number(balance); i++) {
-          const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
-          let image = null
-          try {
-            let uri = await nftContract.tokenURI(tokenId)
-            // Handle ipfs:// URIs
-            if (uri.startsWith('ipfs://')) {
-              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-            }
-            // Try to fetch image from metadata
-            if (uri.startsWith('http')) {
-              const resp = await fetch(uri)
-              const meta = await resp.json()
-              image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-              // Handle ipfs:// in image field
-              if (image && image.startsWith('ipfs://')) {
-                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+        if (addr) {
+          const balance = await nftContract.balanceOf(addr)
+          const tokens = []
+          for (let i = 0; i < Number(balance); i++) {
+            const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
+            let image = null
+            try {
+              let uri = await nftContract.tokenURI(tokenId)
+              // Handle ipfs:// URIs
+              if (uri.startsWith('ipfs://')) {
+                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
-              if (!image) {
-                console.warn('No image field in metadata', meta, uri)
+              // Try to fetch image from metadata
+              if (uri.startsWith('http')) {
+                const resp = await fetch(uri)
+                const meta = await resp.json()
+                image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                // Handle ipfs:// in image field
+                if (image && image.startsWith('ipfs://')) {
+                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+                if (!image) {
+                  console.warn('No image field in metadata', meta, uri)
+                }
+              } else {
+                console.warn('tokenURI is not http(s):', uri)
               }
-            } else {
-              console.warn('tokenURI is not http(s):', uri)
+            } catch (err) {
+              console.warn('Failed to fetch NFT metadata/image', tokenId, err)
             }
-          } catch (err) {
-            console.warn('Failed to fetch NFT metadata/image', tokenId, err)
+            tokens.push({ tokenId: tokenId.toString(), image })
           }
-          tokens.push({ tokenId: tokenId.toString(), image })
+          setWalletNFTs(tokens)
         }
-        setWalletNFTs(tokens)
       } catch (e) {
         setWalletNFTs([])
       }
       // Fetch staked NFTs (getUserStakes)
       try {
         const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
-        const staked = await pool.getUserStakes(addr)
-        setStakedNFTs(staked.map(t => t.toString()))
+        if (addr) {
+          const staked = await pool.getUserStakes(addr)
+          setStakedNFTs(staked.map(t => t.toString()))
+        }
       } catch (e) {
         setStakedNFTs([])
       }
       // Fetch receipt tokens (ERC721)
       try {
         const receipt = new ethers.Contract(stakeReceipt, ["function balanceOf(address) view returns (uint256)", "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", "function tokenURI(uint256) view returns (string)"], provider)
-        const balance = await receipt.balanceOf(addr)
-        const tokens = []
-        for (let i = 0; i < Number(balance); i++) {
-          const tokenId = await receipt.tokenOfOwnerByIndex(addr, i)
-          let image = null
-          try {
-            let uri = await receipt.tokenURI(tokenId)
-            if (uri.startsWith('ipfs://')) {
-              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-            }
-            if (uri.startsWith('http')) {
-              const resp = await fetch(uri)
-              const meta = await resp.json()
-              image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-              if (image && image.startsWith('ipfs://')) {
-                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+        if (addr) {
+          const balance = await receipt.balanceOf(addr)
+          const tokens = []
+          for (let i = 0; i < Number(balance); i++) {
+            const tokenId = await receipt.tokenOfOwnerByIndex(addr, i)
+            let image = null
+            try {
+              let uri = await receipt.tokenURI(tokenId)
+              if (uri.startsWith('ipfs://')) {
+                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
-              if (!image) {
-                console.warn('No image field in metadata', meta, uri)
+              if (uri.startsWith('http')) {
+                const resp = await fetch(uri)
+                const meta = await resp.json()
+                image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                if (image && image.startsWith('ipfs://')) {
+                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+                if (!image) {
+                  console.warn('No image field in metadata', meta, uri)
+                }
+              } else {
+                console.warn('tokenURI is not http(s):', uri)
               }
-            } else {
-              console.warn('tokenURI is not http(s):', uri)
+            } catch (err) {
+              console.warn('Failed to fetch receipt NFT metadata/image', tokenId, err)
             }
-          } catch (err) {
-            console.warn('Failed to fetch receipt NFT metadata/image', tokenId, err)
+            tokens.push({ tokenId: tokenId.toString(), image })
           }
-          tokens.push({ tokenId: tokenId.toString(), image })
+          setReceiptNFTs(tokens)
         }
-        setReceiptNFTs(tokens)
       } catch (e) {
         setReceiptNFTs([])
       }

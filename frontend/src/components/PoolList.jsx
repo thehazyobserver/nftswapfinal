@@ -23,6 +23,7 @@ export default function PoolList() {
   const [poolNames, setPoolNames] = useState({})
   const [loading, setLoading] = useState(false)
   const [selectedPool, setSelectedPool] = useState(null)
+  const [providerError, setProviderError] = useState('')
 
   const factoryAddressEnv = import.meta.env.VITE_FACTORY_ADDRESS || ''
   const [factoryAddress, setFactoryAddress] = useState(factoryAddressEnv)
@@ -33,6 +34,7 @@ export default function PoolList() {
         if (window.ethereum) {
           const p = new ethers.BrowserProvider(window.ethereum)
           setProvider(p)
+          setProviderError('')
           console.log('Provider set: window.ethereum')
           // Check chain id and warn if not Sonic (146)
           try {
@@ -68,12 +70,14 @@ export default function PoolList() {
           }
           if (fallbackProvider) {
             setProvider(fallbackProvider)
+            setProviderError('')
           } else {
-            alert('No Sonic RPC endpoint available. Please check your connection or try again later.')
+            setProviderError('No Sonic RPC endpoint available. Please check your connection or try again later.')
           }
         }
       } catch (e) {
-        console.warn('Provider init failed', e)
+  setProviderError('Provider init failed: ' + (e.message || e.toString()))
+  console.warn('Provider init failed', e)
       }
       // If factory address not provided at build-time, try to fetch runtime config
       if (!factoryAddressEnv) {
@@ -108,7 +112,10 @@ export default function PoolList() {
 
   const fetchPools = async () => {
   if (!factoryAddress) return alert('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
-    if (!provider) return alert('No provider')
+    if (!provider) {
+      setProviderError('No provider available. Please connect your wallet or check your RPC settings.')
+      return
+    }
     setLoading(true)
     try {
       // Quick network / contract validation
@@ -196,10 +203,16 @@ export default function PoolList() {
           {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
         </button>
       </div>
+      {providerError && (
+        <div className="p-4 bg-red-100 text-red-700 rounded shadow text-center font-semibold mb-6 mt-8">
+          {providerError}
+        </div>
+      )}
       <StonerFeePoolActions />
       <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2 mt-12">
         <div className="text-xs sm:text-sm text-muted dark:text-muted">Factory: {factoryAddress || 'Not set'}</div>
       </div>
+
 
       {pools.length === 0 ? (
         <div className="p-6 bg-card rounded shadow text-center text-muted dark:text-muted">No pools loaded.</div>
@@ -227,6 +240,9 @@ export default function PoolList() {
           ))}
         </div>
       )}
+
+      {/* Pass provider to PoolDetail if open */}
+      {selectedPool && <PoolDetail pool={selectedPool} onClose={() => setSelectedPool(null)} provider={provider} />}
 
       {selectedPool && <PoolDetail pool={selectedPool} onClose={() => setSelectedPool(null)} />}
     </div>
