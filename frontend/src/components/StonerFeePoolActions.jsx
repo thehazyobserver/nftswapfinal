@@ -41,11 +41,14 @@ export default function StonerFeePoolActions() {
         
         // Get wallet NFTs
         const balance = await nftContract.balanceOf(addr)
+        console.log('🔢 Stoner NFT balance:', balance.toString())
         const walletTokens = []
         
-        for (let i = 0; i < Math.min(Number(balance), 20); i++) {
+        // Try to get all tokens owned (up to 50 max for performance)
+        for (let i = 0; i < Math.min(Number(balance), 50); i++) {
           try {
             const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
+            console.log(`📝 Found wallet token ${i + 1}/${balance}: #${tokenId.toString()}`)
             let image = null
             
             try {
@@ -71,11 +74,15 @@ export default function StonerFeePoolActions() {
           }
         }
         
+        console.log(`✅ Loaded ${walletTokens.length}/${balance} wallet Stoner NFTs`)
         setWalletNFTs(walletTokens)
         
         // Get staked NFTs
         try {
-          const stakedTokenIds = await feePoolContract.getStakedTokens(addr)
+          const stakedTokenIdsRaw = await feePoolContract.getStakedTokens(addr)
+          // Convert proxy result to actual array 
+          const stakedTokenIds = Array.from(stakedTokenIdsRaw).map(id => id.toString())
+          console.log('🔥 Staked Stoner NFT token IDs:', stakedTokenIds)
           const stakedTokens = []
           
           for (const tokenId of stakedTokenIds) {
@@ -100,6 +107,7 @@ export default function StonerFeePoolActions() {
             stakedTokens.push({ tokenId: tokenId.toString(), image })
           }
           
+          console.log(`✅ Loaded ${stakedTokens.length} staked Stoner NFTs:`, stakedTokens.map(t => t.tokenId))
           setStakedNFTs(stakedTokens)
         } catch (e) {
           console.warn('Failed to fetch staked NFTs:', e)

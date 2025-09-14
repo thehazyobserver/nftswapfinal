@@ -402,7 +402,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       // Fetch pool NFTs (available for swapping)
       try {
         const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
-        const poolTokenIds = await pool.getPoolTokens()
+        const poolTokenIdsRaw = await pool.getPoolTokens()
+        // Convert proxy result to actual array
+        const poolTokenIds = Array.from(poolTokenIdsRaw).map(id => id.toString())
         console.log('🏊 Pool token IDs available for swap:', poolTokenIds)
         
         if (swapCollectionAddr && poolTokenIds.length > 0) {
