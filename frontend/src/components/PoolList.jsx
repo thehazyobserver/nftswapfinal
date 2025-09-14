@@ -43,11 +43,31 @@ export default function PoolList() {
           } catch (e) {
             console.warn('Could not read chainId from injected provider', e)
           }
-        } 
-        // Always set a fallback provider for read-only mode
-        if (!window.ethereum && import.meta.env.VITE_RPC_URL) {
-          const p = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL)
-          setProvider(p)
+        } else {
+          // Try multiple Sonic RPCs as fallback
+          const rpcList = [
+            import.meta.env.VITE_RPC_URL,
+            'https://rpc.soniclabs.com',
+            'https://sonic.drpc.org',
+            'https://sonic-mainnet.alt.technology'
+          ].filter(Boolean)
+          let fallbackProvider = null
+          for (const url of rpcList) {
+            try {
+              const p = new ethers.JsonRpcProvider(url)
+              // Try a simple call to ensure it's working
+              await p.getBlockNumber()
+              fallbackProvider = p
+              break
+            } catch (e) {
+              // Try next
+            }
+          }
+          if (fallbackProvider) {
+            setProvider(fallbackProvider)
+          } else {
+            alert('No Sonic RPC endpoint available. Please check your connection or try again later.')
+          }
         }
       } catch (e) {
         console.warn('Provider init failed', e)
