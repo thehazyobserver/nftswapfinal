@@ -391,18 +391,20 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       try {
         const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
         const poolTokenIds = await pool.getPoolTokens()
-        console.log('Pool token IDs available for swap:', poolTokenIds)
+        console.log('🏊 Pool token IDs available for swap:', poolTokenIds)
         
-        if (collectionAddr && poolTokenIds.length > 0) {
-          const nftContract = new ethers.Contract(collectionAddr, [
+        if (swapCollectionAddr && poolTokenIds.length > 0) {
+          const poolNftContract = new ethers.Contract(swapCollectionAddr, [
             "function tokenURI(uint256) view returns (string)"
           ], provider)
+          
+          console.log(`🎨 Fetching metadata for ${poolTokenIds.length} pool NFTs from collection ${swapCollectionAddr}`)
           
           const tokens = []
           for (const tokenId of poolTokenIds) {
             let image = null
             try {
-              let uri = await nftContract.tokenURI(tokenId)
+              let uri = await poolNftContract.tokenURI(tokenId)
               if (uri && uri.startsWith('ipfs://')) {
                 uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
@@ -422,13 +424,16 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             tokens.push({ tokenId: tokenId.toString(), image })
           }
           setPoolNFTs(tokens)
-          console.log('Pool NFTs fetched:', tokens)
+          console.log('✅ Pool NFTs fetched:', tokens.length, tokens)
         } else {
+          console.log('📭 No pool NFTs available or collection address missing')
           setPoolNFTs([])
         }
+        setPoolLoading(false)
       } catch (e) {
-        console.error('Failed to fetch pool NFTs:', e)
+        console.error('❌ Failed to fetch pool NFTs:', e)
         setPoolNFTs([])
+        setPoolLoading(false)
       }
     }
     fetchNFTs()
@@ -833,7 +838,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         <div>
           <div className="font-semibold mb-2 text-purple-400">Pool NFTs Available for Swap</div>
           <div className="flex gap-3 flex-wrap">
-            {poolNFTs.length === 0 ? (
+            {poolLoading ? (
+              <NFTLoadingSkeleton count={6} size={56} />
+            ) : poolNFTs.length === 0 ? (
               <div className="w-full p-4 bg-secondary/50 rounded-lg text-center">
                 <div className="text-2xl mb-2">🏊‍♂️</div>
                 <div className="text-muted dark:text-muted mb-1">No NFTs in pool</div>
