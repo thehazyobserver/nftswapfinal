@@ -1,0 +1,10 @@
+[build]
+  base = "frontend"
+  command = "npm ci && npm run build"
+  publish = "frontend/dist"
+
+# Optional: provide a redirect for SPA (Netlify will still use _redirects in dist)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
