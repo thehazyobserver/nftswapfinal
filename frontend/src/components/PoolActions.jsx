@@ -18,7 +18,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   const [poolNFTs, setPoolNFTs] = useState([]) // Add pool NFTs state
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
   const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
-  const [selectedSwapToken, setSelectedSwapToken] = useState(null)
+  const [selectedSwapTokens, setSelectedSwapTokens] = useState([])
   const [address, setAddress] = useState(null)
 
   // Helper to get signer
@@ -344,10 +344,15 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
     setLoading(false)
   }
 
-  // Swap NFT
+  // Swap NFT(s)
   const handleSwap = async () => {
-    if (!selectedSwapToken) {
-      setStatus('Please select an NFT to swap')
+    if (selectedSwapTokens.length === 0) {
+      setStatus('Please select at least one NFT to swap')
+      return
+    }
+    
+    if (selectedSwapTokens.length > 10) {
+      setStatus('You can only swap up to 10 NFTs at once.')
       return
     }
     
@@ -362,41 +367,83 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
       
-      // First, approve the NFT for transfer if not already approved
+      // Create NFT contract instance
       const nftContract = new ethers.Contract(nftCollection, [
         "function approve(address,uint256)",
         "function getApproved(uint256) view returns (address)",
-        "function ownerOf(uint256) view returns (address)"
+        "function ownerOf(uint256) view returns (address)",
+        "function setApprovalForAll(address,bool)",
+        "function isApprovedForAll(address,address) view returns (bool)"
       ], signer)
       
-      // Check if user owns the token
-      const owner = await nftContract.ownerOf(selectedSwapToken)
+      // Check ownership and approval for all selected tokens
       const userAddr = await signer.getAddress()
-      if (owner.toLowerCase() !== userAddr.toLowerCase()) {
-        setStatus('You do not own this NFT')
-        setLoading(false)
-        return
+      
+      // Check if user owns all tokens
+      for (const tokenId of selectedSwapTokens) {
+        const owner = await nftContract.ownerOf(tokenId)
+        if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+          setStatus(`❌ You do not own NFT #${tokenId}`)
+          setLoading(false)
+          return
+        }
       }
       
-      // Check if already approved
-      const approved = await nftContract.getApproved(selectedSwapToken)
-      if (approved.toLowerCase() !== swapPool.toLowerCase()) {
-        setStatus('Approving NFT for swap...')
-        const approveTx = await nftContract.approve(swapPool, selectedSwapToken)
-        await approveTx.wait()
+      // Check if approved for all or approve individually
+      setStatus('Checking approvals...')
+      let needsApproval = false
+      
+      // For multiple tokens, it's more efficient to use setApprovalForAll
+      if (selectedSwapTokens.length > 1) {
+        try {
+          const isApprovedForAll = await nftContract.isApprovedForAll(userAddr, swapPool)
+          if (!isApprovedForAll) {
+            setStatus('Approving all NFTs for swap...')
+            const approveTx = await nftContract.setApprovalForAll(swapPool, true)
+            await approveTx.wait()
+          }
+        } catch (e) {
+          // Fallback to individual approvals if setApprovalForAll fails
+          needsApproval = true
+        }
+      } else {
+        needsApproval = true
       }
       
-      // Get swap fee
+      // Individual approvals if needed
+      if (needsApproval) {
+        for (const tokenId of selectedSwapTokens) {
+          const approved = await nftContract.getApproved(tokenId)
+          if (approved.toLowerCase() !== swapPool.toLowerCase()) {
+            setStatus(`Approving NFT #${tokenId} for swap...`)
+            const approveTx = await nftContract.approve(swapPool, tokenId)
+            await approveTx.wait()
+          }
+        }
+      }
+      
+      // Get swap fee and execute swap(s)
       const fee = await contract.swapFeeInWei()
-      setStatus('Swapping NFT...')
-      const tx = await contract.swapNFT(selectedSwapToken, { value: fee })
-      await tx.wait()
-      setStatus('✅ Swap successful!')
+      const totalFee = fee * BigInt(selectedSwapTokens.length)
       
-      // Refresh NFT lists
+      setStatus(`Swapping ${selectedSwapTokens.length} NFT${selectedSwapTokens.length > 1 ? 's' : ''}...`)
+      
+      let tx
+      if (selectedSwapTokens.length > 1 && contract.swapNFTBatch) {
+        // Use batch swap function
+        tx = await contract.swapNFTBatch(selectedSwapTokens, { value: totalFee })
+      } else {
+        // For single NFT or if batch function not available, use single swap
+        tx = await contract.swapNFT(selectedSwapTokens[0], { value: fee })
+      }
+      
+      await tx.wait()
+      setStatus(`✅ Successfully swapped ${selectedSwapTokens.length} NFT${selectedSwapTokens.length > 1 ? 's' : ''}!`)
+      
+      // Refresh NFT lists and clear selection
       fetchUserNFTs()
       fetchPoolTokens()
-      setSelectedSwapToken('')
+      setSelectedSwapTokens([])
       
     } catch (e) {
       console.error('Swap error:', e)
@@ -539,17 +586,67 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           </div>
         </div>
         <div>
-          <div className="font-semibold mb-2 text-indigo-400">Swap Your NFT</div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-indigo-400">Swap Your NFT(s)</div>
+            <div className="flex items-center gap-2">
+              <div className={`text-xs px-2 py-1 rounded ${selectedSwapTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedSwapTokens.length > 0 ? 'bg-indigo-900/30 text-indigo-300' : 'bg-gray-800/30 text-gray-400'}`}>
+                📊 {selectedSwapTokens.length}/10 selected
+              </div>
+              <div className="text-xs text-indigo-300 bg-indigo-900/30 px-2 py-1 rounded">
+                📦 Max 10 NFTs per batch
+              </div>
+            </div>
+          </div>
           <div className="flex gap-3 flex-wrap">
             {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-indigo-900/20 to-card shadow-sm transition-all ${selectedSwapToken === nft.tokenId ? 'border-indigo-400 scale-105' : 'border-gray-700 hover:border-indigo-400'} text-text`} onClick={() => setSelectedSwapToken(nft.tokenId)} disabled={loading}>
+              <button 
+                key={nft.tokenId} 
+                className={`border-2 rounded-xl p-1 bg-gradient-to-br from-indigo-900/20 to-card shadow-sm transition-all ${
+                  selectedSwapTokens.includes(nft.tokenId) 
+                    ? 'border-indigo-400 scale-105 ring-2 ring-indigo-400/50' 
+                    : 'border-gray-700 hover:border-indigo-400'
+                } text-text ${selectedSwapTokens.length >= 10 && !selectedSwapTokens.includes(nft.tokenId) ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                onClick={() => {
+                  if (selectedSwapTokens.includes(nft.tokenId)) {
+                    // Remove from selection
+                    setSelectedSwapTokens(prev => prev.filter(id => id !== nft.tokenId))
+                  } else if (selectedSwapTokens.length < 10) {
+                    // Add to selection if under limit
+                    setSelectedSwapTokens(prev => [...prev, nft.tokenId])
+                  }
+                }}
+                disabled={loading || (selectedSwapTokens.length >= 10 && !selectedSwapTokens.includes(nft.tokenId))}
+              >
                 <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
                 <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
+                {selectedSwapTokens.includes(nft.tokenId) && (
+                  <div className="text-xs text-center text-indigo-400 font-semibold">✓ SELECTED</div>
+                )}
               </button>
             ))}
           </div>
-          <button className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleSwap} disabled={loading || !selectedSwapToken}>Swap</button>
+          <div className="flex items-center gap-3 mt-3">
+            <button 
+              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2" 
+              onClick={handleSwap} 
+              disabled={loading || selectedSwapTokens.length === 0}
+            >
+              {loading && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
+              {loading ? 'Swapping...' : `Swap Selected (${selectedSwapTokens.length})`}
+            </button>
+            {selectedSwapTokens.length > 0 && (
+              <button 
+                className="px-3 py-2 bg-gray-600 text-white rounded shadow text-sm hover:bg-gray-500 transition" 
+                onClick={() => setSelectedSwapTokens([])}
+                disabled={loading}
+              >
+                Clear Selection
+              </button>
+            )}
+          </div>
         </div>
   {status && <div className="mt-4 text-base text-accent font-semibold animate-pulse">{status}</div>}
       </div>
