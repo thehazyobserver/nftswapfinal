@@ -425,8 +425,13 @@ export default function StonerFeePoolActions() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="font-semibold text-blue-400">Your Staked Stoner NFTs</div>
-          <div className="text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
-            📦 Max 10 NFTs per batch
+          <div className="flex items-center gap-2">
+            <div className={`text-xs px-2 py-1 rounded ${selectedStakedTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedStakedTokens.length > 0 ? 'bg-blue-900/30 text-blue-300' : 'bg-gray-800/30 text-gray-400'}`}>
+              📊 {selectedStakedTokens.length}/10 selected
+            </div>
+            <div className="text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
+              📦 Max 10 NFTs per batch
+            </div>
           </div>
         </div>
         <div className="flex gap-3 flex-wrap">
