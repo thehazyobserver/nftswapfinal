@@ -1,4 +1,5 @@
 import React from 'react'
+import PoolActions from './PoolActions'
 
 export default function PoolDetail({ pool, onClose }) {
   return (
@@ -19,9 +20,11 @@ export default function PoolDetail({ pool, onClose }) {
         </div>
 
         <div className="mt-6 flex gap-2">
-          <a className="px-4 py-2 bg-indigo-600 text-white rounded" href={`https://explorer.sonic.org/address/${pool.swapPool}`} target="_blank" rel="noreferrer">Explorer</a>
+          <a className="px-4 py-2 bg-indigo-600 text-white rounded" href={`${import.meta.env.VITE_EXPLORER_BASE || 'https://explorer.sonic.org'}/address/${pool.swapPool}`} target="_blank" rel="noreferrer">Explorer</a>
           <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>Copy Address</button>
         </div>
+
+        <PoolActions swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} />
       </div>
     </div>
   )
