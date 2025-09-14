@@ -6,7 +6,7 @@ import NFTTokenImage from './NFTTokenImage'
 // TODO: Replace with your actual StonerFeePool contract address
 const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
 // TODO: Replace with your actual Stoner NFT contract address
-const STONER_NFT_ADDRESS = '0xe93755cC3b462E193023cf66c0aE3d3FB2E5b8f4'
+const STONER_NFT_ADDRESS = '0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb'
 
 export default function StonerFeePoolActions() {
   const [status, setStatus] = useState('')
