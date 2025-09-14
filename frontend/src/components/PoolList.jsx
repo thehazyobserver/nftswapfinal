@@ -170,19 +170,23 @@ export default function PoolList() {
       {pools.length === 0 ? (
         <div className="p-6 bg-white rounded shadow">No pools loaded. Click "Load Pools".</div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {pools.map((p, i) => (
-            <div key={i} className="p-4 bg-white rounded shadow flex gap-4 items-center">
-              <NFTCollectionImage address={p.nftCollection} size={48} />
+            <div
+              key={i}
+              className="p-5 bg-white rounded-2xl shadow-lg flex gap-5 items-center transition-transform duration-200 hover:scale-105 hover:shadow-2xl border border-transparent hover:border-indigo-200 cursor-pointer"
+              style={{ minHeight: 120 }}
+            >
+              <NFTCollectionImage address={p.nftCollection} size={56} />
               <div className="flex-1">
-                <div className="font-semibold">Collection: {p.nftCollection}</div>
-                <div className="text-sm text-gray-600">SwapPool: {p.swapPool}</div>
-                <div className="text-sm text-gray-600">Receipt: {p.stakeReceipt}</div>
-                <div className="text-sm text-gray-500 mt-2">Created: {p.createdAt}</div>
-                <div className="mt-3 flex gap-2">
-                  <button className="px-3 py-1 bg-indigo-500 text-white rounded" onClick={() => setSelectedPool(p)}>Details</button>
-                  <button className="px-3 py-1 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
-                  <button className="px-3 py-1 bg-gray-200 rounded" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
+                <div className="font-semibold text-lg text-indigo-700 mb-1">Collection: <span className="font-mono text-gray-800">{p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}</span></div>
+                <div className="text-xs text-gray-500">SwapPool: <span className="font-mono">{p.swapPool.slice(0, 6)}...{p.swapPool.slice(-4)}</span></div>
+                <div className="text-xs text-gray-500">Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 6)}...{p.stakeReceipt.slice(-4)}</span></div>
+                <div className="text-xs text-gray-400 mt-1">Created: {p.createdAt}</div>
+                <div className="mt-4 flex gap-2">
+                  <button className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded shadow hover:from-indigo-600 hover:to-blue-600 transition" onClick={() => setSelectedPool(p)}>Details</button>
+                  <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
+                  <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
                 </div>
               </div>
             </div>
