@@ -10,7 +10,37 @@ const collectionImages = {
 
 export default function NFTCollectionImage({ address, size = 48 }) {
   const [broken, setBroken] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  
   const img = collectionImages[address?.toLowerCase()]
-  if (!img || broken) return <div style={{ width: size, height: size }} className="bg-gray-200 rounded" />
-  return <img src={img} alt="NFT Collection" style={{ width: size, height: size, borderRadius: 8 }} onError={() => setBroken(true)} />
+  
+  if (!img || broken) {
+    return (
+      <div 
+        style={{ width: size, height: size }} 
+        className="bg-gradient-to-br from-accent/20 to-indigo-500/20 rounded flex items-center justify-center text-accent text-xs font-bold border-2 border-accent/20"
+      >
+        NFT
+      </div>
+    )
+  }
+  
+  return (
+    <div className="relative">
+      {loading && (
+        <div 
+          style={{ width: size, height: size }} 
+          className="absolute inset-0 bg-gray-300 rounded animate-pulse"
+        />
+      )}
+      <img 
+        src={img} 
+        alt="NFT Collection" 
+        style={{ width: size, height: size, borderRadius: 8 }} 
+        onError={() => setBroken(true)}
+        onLoad={() => setLoading(false)}
+        className={loading ? 'opacity-0' : 'opacity-100'}
+      />
+    </div>
+  )
 }

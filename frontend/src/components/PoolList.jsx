@@ -207,11 +207,46 @@ export default function PoolList() {
       <StonerFeePoolActions />
       <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2 mt-12">
         <div className="text-xs sm:text-sm text-muted dark:text-muted">Factory: {factoryAddress || 'Not set'}</div>
+        <button 
+          onClick={fetchPools} 
+          disabled={loading}
+          className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {loading && (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          )}
+          {loading ? 'Loading...' : 'Refresh Pools'}
+        </button>
       </div>
 
 
-      {pools.length === 0 ? (
-        <div className="p-6 bg-card rounded shadow text-center text-muted dark:text-muted">No pools loaded.</div>
+      {loading && pools.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {[1, 2].map((i) => (
+            <div key={i} className="p-4 sm:p-5 bg-card dark:bg-card rounded-2xl shadow-lg animate-pulse">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 items-center">
+                <div className="w-14 h-14 bg-gray-300 rounded"></div>
+                <div className="flex-1 w-full space-y-2">
+                  <div className="h-4 bg-gray-300 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+                  <div className="h-3 bg-gray-300 rounded w-2/3"></div>
+                  <div className="flex gap-2 mt-4">
+                    <div className="h-6 bg-gray-300 rounded w-16"></div>
+                    <div className="h-6 bg-gray-300 rounded w-20"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : pools.length === 0 ? (
+        <div className="p-6 bg-card rounded shadow text-center">
+          <div className="text-4xl mb-4">🏊‍♂️</div>
+          <div className="text-muted dark:text-muted mb-2">No pools found</div>
+          <div className="text-sm text-muted dark:text-muted">
+            {factoryAddress ? 'Try refreshing or check if any pools are registered with this factory.' : 'Please set a factory address first.'}
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {pools.map((p, i) => (
@@ -251,8 +286,6 @@ export default function PoolList() {
 
       {/* Pass provider to PoolDetail if open */}
       {selectedPool && <PoolDetail pool={selectedPool} onClose={() => setSelectedPool(null)} provider={provider} />}
-
-      {selectedPool && <PoolDetail pool={selectedPool} onClose={() => setSelectedPool(null)} />}
     </div>
   )
 }

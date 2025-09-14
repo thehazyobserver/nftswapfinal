@@ -251,44 +251,56 @@ export default function StonerFeePoolActions() {
       <div className="mb-6">
         <div className="font-semibold mb-2 text-green-400">Stake Stoner NFT</div>
         <div className="flex gap-3 flex-wrap">
-          {walletNFTs.length === 0 && <div className="text-muted italic">No Stoner NFTs in wallet</div>}
-          {walletNFTs.map(nft => (
-            <div key={nft.tokenId} className="flex flex-col items-center">
-              <button 
-                className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${
-                  selectedTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'
-                } text-text`} 
-                onClick={() => setSelectedTokens(tokens => 
-                  tokens.includes(nft.tokenId) 
-                    ? tokens.filter(t => t !== nft.tokenId) 
-                    : [...tokens, nft.tokenId]
-                )} 
-                disabled={loading}
-              >
-                <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
-              </button>
-              {!isApprovedForAll && (
-                <StonerApproveButton 
-                  tokenId={nft.tokenId} 
-                  onApproved={() => setApprovedMap(m => ({ ...m, [nft.tokenId]: true }))} 
-                  disabled={loading || approvedMap[nft.tokenId]} 
-                />
-              )}
+          {walletNFTs.length === 0 ? (
+            <div className="w-full p-6 bg-secondary/50 rounded-lg text-center">
+              <div className="text-3xl mb-2">🔍</div>
+              <div className="text-muted dark:text-muted mb-1">No Stoner NFTs found</div>
+              <div className="text-sm text-muted dark:text-muted">
+                Connect your wallet and make sure you own some Stoner NFTs to stake them here.
+              </div>
             </div>
-          ))}
+          ) : (
+            walletNFTs.map(nft => (
+              <div key={nft.tokenId} className="flex flex-col items-center">
+                <button 
+                  className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${
+                    selectedTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'
+                  } text-text`} 
+                  onClick={() => setSelectedTokens(tokens => 
+                    tokens.includes(nft.tokenId) 
+                      ? tokens.filter(t => t !== nft.tokenId) 
+                      : [...tokens, nft.tokenId]
+                  )} 
+                  disabled={loading}
+                >
+                  <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
+                  <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
+                </button>
+                {!isApprovedForAll && (
+                  <StonerApproveButton 
+                    tokenId={nft.tokenId} 
+                    onApproved={() => setApprovedMap(m => ({ ...m, [nft.tokenId]: true }))} 
+                    disabled={loading || approvedMap[nft.tokenId]} 
+                  />
+                )}
+              </div>
+            ))
+          )}
         </div>
         <div className="flex items-center mt-3 gap-3">
           <button 
-            className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" 
+            className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2" 
             onClick={handleStake} 
             disabled={loading || selectedTokens.length === 0 || (!isApprovedForAll && !selectedTokens.every(tid => approvedMap[tid]))}
           >
-            Stake Selected ({selectedTokens.length})
+            {loading && (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            )}
+            {loading ? 'Staking...' : `Stake Selected (${selectedTokens.length})`}
           </button>
           {!isApprovedForAll && (
             <button 
-              className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50" 
+              className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50 flex items-center gap-2" 
               disabled={approvingAll || loading} 
               onClick={async () => {
                 setApprovingAll(true)
@@ -311,7 +323,10 @@ export default function StonerFeePoolActions() {
                 setApprovingAll(false)
               }}
             >
-              {approvingAll ? 'Approving All...' : 'Approve All'}
+              {approvingAll && (
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
+              {approvingAll ? 'Approving...' : 'Approve All'}
             </button>
           )}
           {isApprovedForAll && <span className="text-green-400 font-semibold text-xs ml-2">All Approved</span>}
