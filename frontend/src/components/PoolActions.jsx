@@ -11,6 +11,8 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   const [walletNFTs, setWalletNFTs] = useState([])
   const [approvedMap, setApprovedMap] = useState({}) // tokenId -> bool
   const [nftCollection, setNftCollection] = useState(null)
+  const [isApprovedForAll, setIsApprovedForAll] = useState(false)
+  const [approvingAll, setApprovingAll] = useState(false)
   const [stakedNFTs, setStakedNFTs] = useState([])
   const [receiptNFTs, setReceiptNFTs] = useState([])
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
@@ -46,12 +48,25 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         setNftCollection(collectionAddr)
         const nftContract = new ethers.Contract(
           collectionAddr,
-          ["function balanceOf(address) view returns (uint256)", "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", "function tokenURI(uint256) view returns (string)", "function getApproved(uint256) view returns (address)"],
+          [
+            "function balanceOf(address) view returns (uint256)",
+            "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)",
+            "function tokenURI(uint256) view returns (string)",
+            "function getApproved(uint256) view returns (address)",
+            "function isApprovedForAll(address,address) view returns (bool)"
+          ],
           provider
         )
         if (addr) {
           const balance = await nftContract.balanceOf(addr)
           const tokens = []
+          // Check isApprovedForAll
+          let approvedAll = false
+          try {
+            approvedAll = await nftContract.isApprovedForAll(addr, swapPool)
+          } catch {}
+          setIsApprovedForAll(!!approvedAll)
+
           const approvedMapTemp = {}
           for (let i = 0; i < Number(balance); i++) {
             const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
@@ -79,8 +94,12 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                 console.warn('tokenURI is not http(s):', uri)
               }
               // Check approval
-              const approvedAddr = await nftContract.getApproved(tokenId)
-              approved = approvedAddr && swapPool && approvedAddr.toLowerCase() === swapPool.toLowerCase()
+              if (approvedAll) {
+                approved = true
+              } else {
+                const approvedAddr = await nftContract.getApproved(tokenId)
+                approved = approvedAddr && swapPool && approvedAddr.toLowerCase() === swapPool.toLowerCase()
+              }
             } catch (err) {
               console.warn('Failed to fetch NFT metadata/image/approval', tokenId, err)
             }
@@ -239,7 +258,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                   <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
                   <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
                 </button>
-                {nftCollection && swapPool && (
+                {nftCollection && swapPool && !isApprovedForAll && (
                   <ApproveNFTButton
                     nftAddress={nftCollection}
                     tokenId={nft.tokenId}
@@ -252,7 +271,33 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
               </div>
             ))}
           </div>
-          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid])}>Stake Selected</button>
+          <div className="flex items-center gap-3 mt-3">
+            <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid] || isApprovedForAll)}>Stake Selected</button>
+            {nftCollection && swapPool && !isApprovedForAll && (
+              <button className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50" disabled={approvingAll || loading} onClick={async () => {
+                setApprovingAll(true)
+                try {
+                  if (!window.ethereum) throw new Error('Wallet not found')
+                  const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner()
+                  const nft = new ethers.Contract(nftCollection, ["function setApprovalForAll(address,bool) external"], signer)
+                  const tx = await nft.setApprovalForAll(swapPool, true)
+                  await tx.wait()
+                  setIsApprovedForAll(true)
+                  setApprovedMap(m => {
+                    const all = { ...m }
+                    walletNFTs.forEach(nft => { all[nft.tokenId] = true })
+                    return all
+                  })
+                } catch (e) {
+                  alert(e.reason || e.message)
+                }
+                setApprovingAll(false)
+              }}>
+                {approvingAll ? 'Approving All...' : 'Approve All'}
+              </button>
+            )}
+            {isApprovedForAll && <span className="text-green-400 font-semibold text-xs ml-2">All Approved</span>}
+          </div>
         </div>
         <div>
           <div className="font-semibold mb-2 text-red-400">Unstake NFT(s)</div>
