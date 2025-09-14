@@ -168,15 +168,15 @@ export default function PoolList() {
   }, [provider, factoryAddress]);
 
   return (
-    <div>
+    <div className="relative">
+      <div className="absolute top-4 right-4 z-50">
+        <button className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition" onClick={connect}>
+          {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
+        </button>
+      </div>
       <StonerFeePoolActions />
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2 mt-12">
         <div className="text-xs sm:text-sm text-muted dark:text-muted">Factory: {factoryAddress || 'Not set'}</div>
-        <div className="flex gap-2 w-full sm:w-auto justify-end">
-          <button className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition w-full sm:w-auto" onClick={connect}>
-            {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
-          </button>
-        </div>
       </div>
 
       {pools.length === 0 ? (
