@@ -3,11 +3,14 @@ import { ethers } from 'ethers'
 import SwapPoolABI from '../abis/SwapPool.json'
 import StakeReceiptABI from '../abis/StakeReceipt.json'
 import NFTTokenImage from './NFTTokenImage'
+import ApproveNFTButton from './ApproveNFTButton'
 
 export default function PoolActions({ swapPool, stakeReceipt, provider: externalProvider }) {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
+  const [approvedMap, setApprovedMap] = useState({}) // tokenId -> bool
+  const [nftCollection, setNftCollection] = useState(null)
   const [stakedNFTs, setStakedNFTs] = useState([])
   const [receiptNFTs, setReceiptNFTs] = useState([])
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
@@ -37,18 +40,23 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       }
       setAddress(addr)
       // Fetch wallet NFTs (ERC721)
+      let collectionAddr = null
       try {
+        collectionAddr = await (new ethers.Contract(swapPool, SwapPoolABI, provider)).nftCollection()
+        setNftCollection(collectionAddr)
         const nftContract = new ethers.Contract(
-          (await (new ethers.Contract(swapPool, SwapPoolABI, provider)).nftCollection()),
-          ["function balanceOf(address) view returns (uint256)", "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", "function tokenURI(uint256) view returns (string)"],
+          collectionAddr,
+          ["function balanceOf(address) view returns (uint256)", "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", "function tokenURI(uint256) view returns (string)", "function getApproved(uint256) view returns (address)"],
           provider
         )
         if (addr) {
           const balance = await nftContract.balanceOf(addr)
           const tokens = []
+          const approvedMapTemp = {}
           for (let i = 0; i < Number(balance); i++) {
             const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
             let image = null
+            let approved = false
             try {
               let uri = await nftContract.tokenURI(tokenId)
               // Handle ipfs:// URIs
@@ -70,12 +78,17 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
               } else {
                 console.warn('tokenURI is not http(s):', uri)
               }
+              // Check approval
+              const approvedAddr = await nftContract.getApproved(tokenId)
+              approved = approvedAddr && swapPool && approvedAddr.toLowerCase() === swapPool.toLowerCase()
             } catch (err) {
-              console.warn('Failed to fetch NFT metadata/image', tokenId, err)
+              console.warn('Failed to fetch NFT metadata/image/approval', tokenId, err)
             }
             tokens.push({ tokenId: tokenId.toString(), image })
+            approvedMapTemp[tokenId.toString()] = approved
           }
           setWalletNFTs(tokens)
+          setApprovedMap(approvedMapTemp)
         }
       } catch (e) {
         setWalletNFTs([])
@@ -221,13 +234,25 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           <div className="flex gap-3 flex-wrap">
             {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
-                <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
-              </button>
+              <div key={nft.tokenId} className="flex flex-col items-center">
+                <button className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
+                  <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
+                  <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
+                </button>
+                {nftCollection && swapPool && (
+                  <ApproveNFTButton
+                    nftAddress={nftCollection}
+                    tokenId={nft.tokenId}
+                    spender={swapPool}
+                    provider={externalProvider}
+                    disabled={loading || approvedMap[nft.tokenId]}
+                    onApproved={() => setApprovedMap(m => ({ ...m, [nft.tokenId]: true }))}
+                  />
+                )}
+              </div>
             ))}
           </div>
-          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0}>Stake Selected</button>
+          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid])}>Stake Selected</button>
         </div>
         <div>
           <div className="font-semibold mb-2 text-red-400">Unstake NFT(s)</div>
