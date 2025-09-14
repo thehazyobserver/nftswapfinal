@@ -59,14 +59,10 @@ export default function StonerFeePoolActions() {
       const signer = await provider.getSigner()
       const addr = await signer.getAddress()
       try {
+        // Use full ABI for custom enumeration
         const nftContract = new ethers.Contract(
           STONER_NFT_ADDRESS,
-          [
-            "function balanceOf(address) view returns (uint256)",
-            "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)",
-            "function tokenURI(uint256) view returns (string)",
-            "function isApprovedForAll(address,address) view returns (bool)"
-          ],
+          StonerNFTABI,
           provider
         )
         // Check isApprovedForAll
@@ -76,10 +72,21 @@ export default function StonerFeePoolActions() {
         } catch {}
         setIsApprovedForAll(!!approvedAll)
 
-        const balance = await nftContract.balanceOf(addr)
-        const tokens = []
+        let tokens = []
+        let count = 0
+        try {
+          count = await nftContract.totalNFTsOwned(addr)
+        } catch {
+          // fallback to balanceOf
+          try {
+            count = await nftContract.balanceOf(addr)
+          } catch {
+            count = 0
+          }
+        }
+        count = Number(count)
         let usedFallback = false
-        for (let i = 0; i < Number(balance); i++) {
+        for (let i = 0; i < count; i++) {
           let tokenId = null
           try {
             tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
@@ -113,10 +120,11 @@ export default function StonerFeePoolActions() {
           tokens.push({ tokenId: tokenId?.toString(), image })
         }
         // Fallback: scan a range of tokenIds if tokenOfOwnerByIndex is not supported
-        if (usedFallback && Number(balance) > 0) {
+        if (usedFallback && count > 0) {
           console.warn('tokenOfOwnerByIndex not supported, using fallback scan for Stoner NFTs')
           // Try scanning tokenIds 0..(max 10000)
-          for (let tokenId = 0; tokenId < Math.min(10000, Number(balance) + 100); tokenId++) {
+          let found = 0
+          for (let tokenId = 0; tokenId < Math.min(10000, count + 100); tokenId++) {
             try {
               const owner = await nftContract.ownerOf(tokenId)
               if (owner && owner.toLowerCase() === addr.toLowerCase()) {
@@ -136,6 +144,8 @@ export default function StonerFeePoolActions() {
                   }
                 } catch {}
                 tokens.push({ tokenId: tokenId.toString(), image })
+                found++
+                if (found >= count) break
               }
             } catch {}
           }
