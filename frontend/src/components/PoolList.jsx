@@ -33,6 +33,7 @@ export default function PoolList() {
         if (window.ethereum) {
           const p = new ethers.BrowserProvider(window.ethereum)
           setProvider(p)
+          console.log('Provider set: window.ethereum')
           // Check chain id and warn if not Sonic (146)
           try {
             const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' })
@@ -58,8 +59,10 @@ export default function PoolList() {
               // Try a simple call to ensure it's working
               await p.getBlockNumber()
               fallbackProvider = p
+              console.log('Provider set: ' + url)
               break
             } catch (e) {
+              console.warn('RPC failed', url, e)
               // Try next
             }
           }
