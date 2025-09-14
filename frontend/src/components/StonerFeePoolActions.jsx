@@ -27,12 +27,13 @@ export default function StonerFeePoolActions() {
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
-      const tx = await contract.stakeNFT(selectedToken)
+      const tx = await contract.stake(selectedToken)
       setStatus('Staking...')
       await tx.wait()
       setStatus('Stake successful!')
     } catch (e) {
       setStatus('Stake failed: ' + (e.reason || e.message))
+      console.error('Stake error', e)
     }
     setLoading(false)
   }
@@ -79,12 +80,13 @@ export default function StonerFeePoolActions() {
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
-      const tx = await contract.claimRewards()
+      const tx = await contract.claimAllRewards()
       setStatus('Claiming rewards...')
       await tx.wait()
       setStatus('Rewards claimed!')
     } catch (e) {
       setStatus('Claim failed: ' + (e.reason || e.message))
+      console.error('Claim error', e)
     }
     setLoading(false)
   }
