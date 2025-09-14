@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import StonerFeePoolABI from '../abis/StonerFeePool.json'
 import NFTTokenImage from './NFTTokenImage'
+import StonerNFTABI from '../abis/StonerNFT.json'
+import StonerApproveButton from './StonerApproveButton'
 
 // TODO: Replace with your actual StonerFeePool contract address
 const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
@@ -13,6 +15,7 @@ export default function StonerFeePoolActions() {
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
   const [selectedToken, setSelectedToken] = useState(null)
+  const [isApproved, setIsApproved] = useState(false)
 
   const getSigner = async () => {
     if (!window.ethereum) throw new Error('Wallet not found')
@@ -25,7 +28,16 @@ export default function StonerFeePoolActions() {
     setStatus('')
     setLoading(true)
     try {
-      const signer = await getSigner()
+      // Check approval before staking
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const nft = new ethers.Contract(STONER_NFT_ADDRESS, StonerNFTABI, provider)
+      const approvedAddr = await nft.getApproved(selectedToken)
+      if (approvedAddr.toLowerCase() !== STONER_FEE_POOL_ADDRESS.toLowerCase()) {
+        setStatus('Please approve this NFT before staking.')
+        setLoading(false)
+        return
+      }
       const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
       const tx = await contract.stake(selectedToken)
       setStatus('Staking...')
@@ -56,13 +68,29 @@ export default function StonerFeePoolActions() {
           const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
           let image = null
           try {
-            const uri = await nftContract.tokenURI(tokenId)
+            let uri = await nftContract.tokenURI(tokenId)
+            // Handle ipfs:// URIs
+            if (uri.startsWith('ipfs://')) {
+              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+            }
             if (uri.startsWith('http')) {
               const resp = await fetch(uri)
               const meta = await resp.json()
-              image = meta.image || null
+              // Try image, image_url, or nested fields
+              image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+              // Handle ipfs:// in image field
+              if (image && image.startsWith('ipfs://')) {
+                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              if (!image) {
+                console.warn('No image field in metadata', meta, uri)
+              }
+            } else {
+              console.warn('tokenURI is not http(s):', uri)
             }
-          } catch {}
+          } catch (err) {
+            console.warn('Failed to fetch NFT metadata/image', tokenId, err)
+          }
           tokens.push({ tokenId: tokenId.toString(), image })
         }
         setWalletNFTs(tokens)
@@ -72,6 +100,26 @@ export default function StonerFeePoolActions() {
     }
     fetchNFTs()
   }, [])
+
+  // Check approval for selected token
+  useEffect(() => {
+    if (!selectedToken) {
+      setIsApproved(false)
+      return
+    }
+    const checkApproval = async () => {
+      try {
+        if (!window.ethereum) return
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const nft = new ethers.Contract(STONER_NFT_ADDRESS, StonerNFTABI, provider)
+        const approvedAddr = await nft.getApproved(selectedToken)
+        setIsApproved(approvedAddr.toLowerCase() === STONER_FEE_POOL_ADDRESS.toLowerCase())
+      } catch {
+        setIsApproved(false)
+      }
+    }
+    checkApproval()
+  }, [selectedToken, loading])
 
   // Claim rewards
   const handleClaim = async () => {
@@ -105,7 +153,10 @@ export default function StonerFeePoolActions() {
             </button>
           ))}
         </div>
-        <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || !selectedToken}>Stake</button>
+        <div className="flex items-center mt-3">
+          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || !selectedToken || !isApproved}>Stake</button>
+          {selectedToken && <StonerApproveButton tokenId={selectedToken} onApproved={() => setIsApproved(true)} disabled={loading || isApproved} />}
+        </div>
       </div>
       <div className="mb-4">
         <div className="font-semibold mb-2 text-yellow-400">Claim Rewards</div>

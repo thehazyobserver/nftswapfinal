@@ -43,14 +43,29 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
           const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
           let image = null
           try {
-            const uri = await nftContract.tokenURI(tokenId)
+            let uri = await nftContract.tokenURI(tokenId)
+            // Handle ipfs:// URIs
+            if (uri.startsWith('ipfs://')) {
+              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+            }
             // Try to fetch image from metadata
             if (uri.startsWith('http')) {
               const resp = await fetch(uri)
               const meta = await resp.json()
-              image = meta.image || null
+              image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+              // Handle ipfs:// in image field
+              if (image && image.startsWith('ipfs://')) {
+                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              if (!image) {
+                console.warn('No image field in metadata', meta, uri)
+              }
+            } else {
+              console.warn('tokenURI is not http(s):', uri)
             }
-          } catch {}
+          } catch (err) {
+            console.warn('Failed to fetch NFT metadata/image', tokenId, err)
+          }
           tokens.push({ tokenId: tokenId.toString(), image })
         }
         setWalletNFTs(tokens)
@@ -74,13 +89,26 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
           const tokenId = await receipt.tokenOfOwnerByIndex(addr, i)
           let image = null
           try {
-            const uri = await receipt.tokenURI(tokenId)
+            let uri = await receipt.tokenURI(tokenId)
+            if (uri.startsWith('ipfs://')) {
+              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+            }
             if (uri.startsWith('http')) {
               const resp = await fetch(uri)
               const meta = await resp.json()
-              image = meta.image || null
+              image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+              if (image && image.startsWith('ipfs://')) {
+                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              if (!image) {
+                console.warn('No image field in metadata', meta, uri)
+              }
+            } else {
+              console.warn('tokenURI is not http(s):', uri)
             }
-          } catch {}
+          } catch (err) {
+            console.warn('Failed to fetch receipt NFT metadata/image', tokenId, err)
+          }
           tokens.push({ tokenId: tokenId.toString(), image })
         }
         setReceiptNFTs(tokens)
