@@ -164,38 +164,38 @@ export default function PoolList() {
   return (
     <div>
       <StonerFeePoolActions />
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-sm text-gray-600">Factory: {factoryAddress || 'Not set'}</div>
-        <div className="flex gap-2 absolute top-4 right-6 z-50">
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded" onClick={connect}>
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-2">
+        <div className="text-xs sm:text-sm text-muted dark:text-muted">Factory: {factoryAddress || 'Not set'}</div>
+        <div className="flex gap-2 w-full sm:w-auto justify-end">
+          <button className="px-4 py-2 bg-accent text-white rounded shadow hover:bg-accent/80 transition w-full sm:w-auto" onClick={connect}>
             {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
           </button>
-          <button className="px-4 py-2 bg-green-600 text-white rounded" onClick={fetchPools}>
+          <button className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 transition w-full sm:w-auto" onClick={fetchPools}>
             {loading ? 'Loading…' : 'Load Pools'}
           </button>
         </div>
       </div>
 
       {pools.length === 0 ? (
-        <div className="p-6 bg-white rounded shadow">No pools loaded. Click "Load Pools".</div>
+  <div className="p-6 bg-card rounded shadow text-center text-muted dark:text-muted">No pools loaded. Click "Load Pools".</div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {pools.map((p, i) => (
             <div
               key={i}
-              className="p-5 bg-white rounded-2xl shadow-lg flex gap-5 items-center transition-transform duration-200 hover:scale-105 hover:shadow-2xl border border-transparent hover:border-indigo-200 cursor-pointer"
+              className="p-4 sm:p-5 bg-card dark:bg-card rounded-2xl shadow-lg flex flex-col sm:flex-row gap-4 sm:gap-5 items-center transition-transform duration-200 hover:scale-105 hover:shadow-2xl border border-transparent hover:border-accent/30 cursor-pointer"
               style={{ minHeight: 120 }}
             >
               <NFTCollectionImage address={p.nftCollection} size={56} />
-              <div className="flex-1">
-                <div className="font-semibold text-lg text-indigo-700 mb-1">{poolNames[p.nftCollection] || 'Collection'} <span className="font-mono text-gray-800">{p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}</span></div>
-                <div className="text-xs text-gray-500">SwapPool: <span className="font-mono">{p.swapPool.slice(0, 6)}...{p.swapPool.slice(-4)}</span></div>
-                <div className="text-xs text-gray-500">Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 6)}...{p.stakeReceipt.slice(-4)}</span></div>
-                <div className="text-xs text-gray-400 mt-1">Created: {p.createdAt}</div>
-                <div className="mt-4 flex gap-2">
-                  <button className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded shadow hover:from-indigo-600 hover:to-blue-600 transition" onClick={() => setSelectedPool(p)}>Details</button>
-                  <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
-                  <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
+              <div className="flex-1 w-full">
+                <div className="font-semibold text-base sm:text-lg text-accent mb-1">{poolNames[p.nftCollection] || 'Collection'} <span className="font-mono text-muted dark:text-muted">{p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}</span></div>
+                <div className="text-xs text-muted dark:text-muted">SwapPool: <span className="font-mono">{p.swapPool.slice(0, 6)}...{p.swapPool.slice(-4)}</span></div>
+                <div className="text-xs text-muted dark:text-muted">Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 6)}...{p.stakeReceipt.slice(-4)}</span></div>
+                <div className="text-xs text-muted dark:text-muted mt-1">Created: {p.createdAt}</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button className="px-3 py-1 bg-gradient-to-r from-accent to-indigo-700 text-white rounded shadow hover:from-indigo-600 hover:to-blue-600 transition" onClick={() => setSelectedPool(p)}>Details</button>
+                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20" onClick={() => navigator.clipboard.writeText(p.swapPool)}>Copy Swap</button>
+                  <button className="px-3 py-1 bg-secondary text-text rounded hover:bg-accent/20" onClick={() => navigator.clipboard.writeText(p.stakeReceipt)}>Copy Receipt</button>
                 </div>
               </div>
             </div>

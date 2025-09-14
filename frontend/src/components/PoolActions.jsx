@@ -173,53 +173,53 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
   }
 
   return (
-    <div className="mt-6 p-6 bg-white rounded-2xl shadow-xl border border-indigo-50">
-      <h4 className="font-bold text-lg mb-4 text-indigo-700 tracking-wide">Pool Actions</h4>
+    <div className="mt-6 p-4 sm:p-6 bg-secondary dark:bg-secondary rounded-2xl shadow-xl border border-accent/10">
+      <h4 className="font-bold text-lg mb-4 text-accent tracking-wide">Pool Actions</h4>
       <div className="space-y-6">
         <div>
-          <div className="font-semibold mb-2 text-green-700">Stake NFT(s)</div>
+          <div className="font-semibold mb-2 text-green-400">Stake NFT(s)</div>
           <div className="flex gap-3 flex-wrap">
-            {walletNFTs.length === 0 && <div className="text-gray-400 italic">No NFTs in wallet</div>}
+            {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-50 to-white shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-500 scale-105' : 'border-gray-200 hover:border-green-300'}`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
+              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
                 <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                <div className="text-xs text-center text-gray-700 font-mono">#{nft.tokenId}</div>
+                <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
               </button>
             ))}
           </div>
           <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0}>Stake Selected</button>
         </div>
         <div>
-          <div className="font-semibold mb-2 text-red-700">Unstake NFT(s)</div>
+          <div className="font-semibold mb-2 text-red-400">Unstake NFT(s)</div>
           <div className="flex gap-3 flex-wrap">
-            {receiptNFTs.length === 0 && <div className="text-gray-400 italic">No receipt tokens</div>}
+            {receiptNFTs.length === 0 && <div className="text-muted italic">No receipt tokens</div>}
             {receiptNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-red-50 to-white shadow-sm transition-all ${selectedReceiptTokens.includes(nft.tokenId) ? 'border-red-500 scale-105' : 'border-gray-200 hover:border-red-300'}`} onClick={() => setSelectedReceiptTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
+              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-red-900/20 to-card shadow-sm transition-all ${selectedReceiptTokens.includes(nft.tokenId) ? 'border-red-400 scale-105' : 'border-gray-700 hover:border-red-400'} text-text`} onClick={() => setSelectedReceiptTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
                 <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                <div className="text-xs text-center text-gray-700 font-mono">#{nft.tokenId}</div>
+                <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
               </button>
             ))}
           </div>
           <button className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleUnstake} disabled={loading || selectedReceiptTokens.length === 0}>Unstake Selected</button>
         </div>
         <div>
-          <div className="font-semibold mb-2 text-yellow-700">Claim Rewards</div>
+          <div className="font-semibold mb-2 text-yellow-400">Claim Rewards</div>
           <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleClaim} disabled={loading}>Claim</button>
         </div>
         <div>
-          <div className="font-semibold mb-2 text-indigo-700">Swap NFT</div>
+          <div className="font-semibold mb-2 text-indigo-400">Swap NFT</div>
           <div className="flex gap-3 flex-wrap">
-            {walletNFTs.length === 0 && <div className="text-gray-400 italic">No NFTs in wallet</div>}
+            {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-indigo-50 to-white shadow-sm transition-all ${selectedSwapToken === nft.tokenId ? 'border-indigo-500 scale-105' : 'border-gray-200 hover:border-indigo-300'}`} onClick={() => setSelectedSwapToken(nft.tokenId)} disabled={loading}>
+              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-indigo-900/20 to-card shadow-sm transition-all ${selectedSwapToken === nft.tokenId ? 'border-indigo-400 scale-105' : 'border-gray-700 hover:border-indigo-400'} text-text`} onClick={() => setSelectedSwapToken(nft.tokenId)} disabled={loading}>
                 <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                <div className="text-xs text-center text-gray-700 font-mono">#{nft.tokenId}</div>
+                <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
               </button>
             ))}
           </div>
           <button className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleSwap} disabled={loading || !selectedSwapToken}>Swap</button>
         </div>
-  {status && <div className="mt-4 text-base text-blue-700 font-semibold animate-pulse">{status}</div>}
+  {status && <div className="mt-4 text-base text-accent font-semibold animate-pulse">{status}</div>}
       </div>
     </div>
   )

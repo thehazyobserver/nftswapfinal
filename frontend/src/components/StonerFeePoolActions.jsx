@@ -90,26 +90,26 @@ export default function StonerFeePoolActions() {
   }
 
   return (
-    <div className="mt-8 p-6 bg-white rounded-2xl shadow-xl border border-indigo-50">
-      <h3 className="font-bold text-lg mb-4 text-indigo-700 tracking-wide">StonerFeePool Staking & Rewards</h3>
+    <div className="mt-8 p-4 sm:p-6 bg-secondary dark:bg-secondary rounded-2xl shadow-xl border border-accent/10">
+      <h3 className="font-bold text-lg mb-4 text-accent tracking-wide">StonerFeePool Staking & Rewards</h3>
       <div className="mb-6">
-        <div className="font-semibold mb-2 text-green-700">Stake Stoner NFT</div>
+        <div className="font-semibold mb-2 text-green-400">Stake Stoner NFT</div>
         <div className="flex gap-3 flex-wrap">
-          {walletNFTs.length === 0 && <div className="text-gray-400 italic">No Stoner NFTs in wallet</div>}
+          {walletNFTs.length === 0 && <div className="text-muted italic">No Stoner NFTs in wallet</div>}
           {walletNFTs.map(nft => (
-            <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-50 to-white shadow-sm transition-all ${selectedToken === nft.tokenId ? 'border-green-500 scale-105' : 'border-gray-200 hover:border-green-300'}`} onClick={() => setSelectedToken(nft.tokenId)} disabled={loading}>
+            <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedToken === nft.tokenId ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedToken(nft.tokenId)} disabled={loading}>
               <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-              <div className="text-xs text-center text-gray-700 font-mono">#{nft.tokenId}</div>
+              <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
             </button>
           ))}
         </div>
         <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || !selectedToken}>Stake</button>
       </div>
       <div className="mb-4">
-        <div className="font-semibold mb-2 text-yellow-700">Claim Rewards</div>
+        <div className="font-semibold mb-2 text-yellow-400">Claim Rewards</div>
         <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleClaim} disabled={loading}>Claim Rewards</button>
       </div>
-      {status && <div className="text-blue-700 text-base font-semibold animate-pulse">{status}</div>}
+      {status && <div className="text-accent text-base font-semibold animate-pulse">{status}</div>}
     </div>
   )
 }
