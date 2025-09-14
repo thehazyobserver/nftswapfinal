@@ -16,6 +16,8 @@ export default function StonerFeePoolActions() {
   const [walletNFTs, setWalletNFTs] = useState([])
   const [selectedToken, setSelectedToken] = useState(null)
   const [isApproved, setIsApproved] = useState(false)
+  const [isApprovedForAll, setIsApprovedForAll] = useState(false)
+  const [approvingAll, setApprovingAll] = useState(false)
 
   const getSigner = async () => {
     if (!window.ethereum) throw new Error('Wallet not found')
@@ -49,7 +51,7 @@ export default function StonerFeePoolActions() {
     }
     setLoading(false)
   }
-  // Fetch user's Stoner NFTs
+  // Fetch user's Stoner NFTs and approval for all
   useEffect(() => {
     const fetchNFTs = async () => {
       if (!window.ethereum) return
@@ -59,9 +61,21 @@ export default function StonerFeePoolActions() {
       try {
         const nftContract = new ethers.Contract(
           STONER_NFT_ADDRESS,
-          ["function balanceOf(address) view returns (uint256)", "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", "function tokenURI(uint256) view returns (string)"],
+          [
+            "function balanceOf(address) view returns (uint256)",
+            "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)",
+            "function tokenURI(uint256) view returns (string)",
+            "function isApprovedForAll(address,address) view returns (bool)"
+          ],
           provider
         )
+        // Check isApprovedForAll
+        let approvedAll = false
+        try {
+          approvedAll = await nftContract.isApprovedForAll(addr, STONER_FEE_POOL_ADDRESS)
+        } catch {}
+        setIsApprovedForAll(!!approvedAll)
+
         const balance = await nftContract.balanceOf(addr)
         const tokens = []
         let usedFallback = false
@@ -186,9 +200,28 @@ export default function StonerFeePoolActions() {
             </button>
           ))}
         </div>
-        <div className="flex items-center mt-3">
-          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || !selectedToken || !isApproved}>Stake</button>
-          {selectedToken && <StonerApproveButton tokenId={selectedToken} onApproved={() => setIsApproved(true)} disabled={loading || isApproved} />}
+        <div className="flex items-center mt-3 gap-3">
+          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || !selectedToken || (!isApproved && !isApprovedForAll)}>Stake</button>
+          {selectedToken && !isApprovedForAll && <StonerApproveButton tokenId={selectedToken} onApproved={() => setIsApproved(true)} disabled={loading || isApproved} />}
+          {!isApprovedForAll && (
+            <button className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50" disabled={approvingAll || loading} onClick={async () => {
+              setApprovingAll(true)
+              try {
+                if (!window.ethereum) throw new Error('Wallet not found')
+                const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner()
+                const nft = new ethers.Contract(STONER_NFT_ADDRESS, ["function setApprovalForAll(address,bool) external"], signer)
+                const tx = await nft.setApprovalForAll(STONER_FEE_POOL_ADDRESS, true)
+                await tx.wait()
+                setIsApprovedForAll(true)
+              } catch (e) {
+                alert(e.reason || e.message)
+              }
+              setApprovingAll(false)
+            }}>
+              {approvingAll ? 'Approving All...' : 'Approve All'}
+            </button>
+          )}
+          {isApprovedForAll && <span className="text-green-400 font-semibold text-xs ml-2">All Approved</span>}
         </div>
       </div>
       <div className="mb-4">
