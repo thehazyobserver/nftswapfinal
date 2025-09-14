@@ -327,7 +327,17 @@ export default function StonerFeePoolActions() {
     <div className="mt-8 p-4 sm:p-6 bg-secondary dark:bg-secondary rounded-2xl shadow-xl border border-accent/10">
       <h3 className="font-bold text-lg mb-4 text-accent tracking-wide">StonerFeePool Staking & Rewards</h3>
       <div className="mb-6">
-        <div className="font-semibold mb-2 text-green-400">Stake Stoner NFT</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-semibold text-green-400">Stake Stoner NFT</div>
+          <div className="flex items-center gap-2">
+            <div className={`text-xs px-2 py-1 rounded ${selectedTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedTokens.length > 0 ? 'bg-green-900/30 text-green-300' : 'bg-gray-800/30 text-gray-400'}`}>
+              📊 {selectedTokens.length}/10 selected
+            </div>
+            <div className="text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
+              📦 Max 10 NFTs per batch
+            </div>
+          </div>
+        </div>
         <div className="flex gap-3 flex-wrap">
           {walletNFTs.length === 0 ? (
             <div className="w-full p-6 bg-secondary/50 rounded-lg text-center">
@@ -413,7 +423,12 @@ export default function StonerFeePoolActions() {
 
       {/* Staked NFTs Section */}
       <div className="mb-6">
-        <div className="font-semibold mb-2 text-blue-400">Your Staked Stoner NFTs</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-semibold text-blue-400">Your Staked Stoner NFTs</div>
+          <div className="text-xs text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
+            📦 Max 10 NFTs per batch
+          </div>
+        </div>
         <div className="flex gap-3 flex-wrap">
           {stakedNFTs.length === 0 ? (
             <div className="w-full p-6 bg-secondary/50 rounded-lg text-center">
