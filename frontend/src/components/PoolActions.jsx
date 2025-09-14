@@ -4,6 +4,7 @@ import SwapPoolABI from '../abis/SwapPool.json'
 import StakeReceiptABI from '../abis/StakeReceipt.json'
 import NFTTokenImage from './NFTTokenImage'
 import ApproveNFTButton from './ApproveNFTButton'
+import NFTLoadingSkeleton from './NFTLoadingSkeleton'
 
 export default function PoolActions({ swapPool, stakeReceipt, provider: externalProvider }) {
   const [status, setStatus] = useState('')
@@ -20,6 +21,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
   const [selectedSwapTokens, setSelectedSwapTokens] = useState([])
   const [address, setAddress] = useState(null)
+  const [walletLoading, setWalletLoading] = useState(false)
+  const [receiptLoading, setReceiptLoading] = useState(false)
+  const [poolLoading, setPoolLoading] = useState(false)
 
   // Helper to get signer
   const getSigner = async () => {
@@ -34,6 +38,10 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       // Use externalProvider for read-only, fallback to window.ethereum if not provided
       const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
       if (!provider) return
+      
+      setWalletLoading(true)
+      setReceiptLoading(true)
+      
       let addr = null
       if (window.ethereum) {
         try {
@@ -68,50 +76,81 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           } catch {}
           setIsApprovedForAll(!!approvedAll)
 
-          const approvedMapTemp = {}
+          // Get all token IDs first (parallel)
+          const tokenIdPromises = []
           for (let i = 0; i < Number(balance); i++) {
-            const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
-            let image = null
-            let approved = false
-            try {
-              let uri = await nftContract.tokenURI(tokenId)
-              // Handle ipfs:// URIs
-              if (uri.startsWith('ipfs://')) {
-                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-              }
-              // Try to fetch image from metadata
-              if (uri.startsWith('http')) {
-                const resp = await fetch(uri)
-                const meta = await resp.json()
-                image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-                // Handle ipfs:// in image field
-                if (image && image.startsWith('ipfs://')) {
-                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                }
-                if (!image) {
-                  console.warn('No image field in metadata', meta, uri)
-                }
-              } else {
-                console.warn('tokenURI is not http(s):', uri)
-              }
-              // Check approval
-              if (approvedAll) {
-                approved = true
-              } else {
-                const approvedAddr = await nftContract.getApproved(tokenId)
-                approved = approvedAddr && swapPool && approvedAddr.toLowerCase() === swapPool.toLowerCase()
-              }
-            } catch (err) {
-              console.warn('Failed to fetch NFT metadata/image/approval', tokenId, err)
-            }
-            tokens.push({ tokenId: tokenId.toString(), image })
-            approvedMapTemp[tokenId.toString()] = approved
+            tokenIdPromises.push(nftContract.tokenOfOwnerByIndex(addr, i))
           }
-          setWalletNFTs(tokens)
+          const tokenIds = await Promise.all(tokenIdPromises)
+
+          // Batch fetch all token URIs (parallel)
+          const tokenUriPromises = tokenIds.map(tokenId => 
+            nftContract.tokenURI(tokenId).catch(err => {
+              console.warn(`Failed to get URI for token ${tokenId}:`, err)
+              return null
+            })
+          )
+          const tokenUris = await Promise.all(tokenUriPromises)
+
+          // Batch check approvals (parallel)
+          const approvalPromises = tokenIds.map(tokenId => {
+            if (approvedAll) return Promise.resolve(true)
+            return nftContract.getApproved(tokenId).then(approved => 
+              approved && swapPool && approved.toLowerCase() === swapPool.toLowerCase()
+            ).catch(() => false)
+          })
+          const approvals = await Promise.all(approvalPromises)
+
+          // Process metadata in parallel with limited concurrency to avoid rate limits
+          const batchSize = 5 // Process 5 metadata requests at a time
+          const walletTokens = []
+          const approvedMapTemp = {}
+
+          for (let i = 0; i < tokenIds.length; i += batchSize) {
+            const batch = tokenIds.slice(i, i + batchSize)
+            const batchPromises = batch.map(async (tokenId, batchIndex) => {
+              const globalIndex = i + batchIndex
+              let image = null
+              const uri = tokenUris[globalIndex]
+              
+              if (uri) {
+                try {
+                  // Handle ipfs:// URIs
+                  let processedUri = uri.startsWith('ipfs://') ? 
+                    uri.replace('ipfs://', 'https://ipfs.io/ipfs/') : uri
+                  
+                  // Try to fetch image from metadata
+                  if (processedUri.startsWith('http')) {
+                    const resp = await fetch(processedUri)
+                    const meta = await resp.json()
+                    image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                    
+                    // Handle ipfs:// in image field
+                    if (image && image.startsWith('ipfs://')) {
+                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                  }
+                } catch (err) {
+                  console.warn(`Failed to fetch metadata for token ${tokenId}:`, err)
+                }
+              }
+
+              const tokenIdStr = tokenId.toString()
+              approvedMapTemp[tokenIdStr] = approvals[globalIndex]
+              return { tokenId: tokenIdStr, image }
+            })
+
+            // Wait for current batch to complete
+            const batchResults = await Promise.all(batchPromises)
+            walletTokens.push(...batchResults)
+          }
+          setWalletNFTs(walletTokens)
           setApprovedMap(approvedMapTemp)
+          setWalletLoading(false)
         }
       } catch (e) {
         setWalletNFTs([])
+        setWalletLoading(false)
       }
       // Fetch staked NFTs (getUserStakes)
       try {
@@ -486,13 +525,17 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             </div>
           </div>
           <div className="flex gap-3 flex-wrap">
-            {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
-            {walletNFTs.map(nft => (
-              <div key={nft.tokenId} className="flex flex-col items-center">
-                <button className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
-                  <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                  <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
-                </button>
+            {walletLoading ? (
+              <NFTLoadingSkeleton count={6} size={56} />
+            ) : walletNFTs.length === 0 ? (
+              <div className="text-muted italic">No NFTs in wallet</div>
+            ) : (
+              walletNFTs.map(nft => (
+                <div key={nft.tokenId} className="flex flex-col items-center">
+                  <button className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
+                    <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
+                    <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
+                  </button>
                 {nftCollection && swapPool && !isApprovedForAll && (
                   <ApproveNFTButton
                     nftAddress={nftCollection}
@@ -504,7 +547,8 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                   />
                 )}
               </div>
-            ))}
+              ))
+            )}
           </div>
           <div className="flex items-center gap-3 mt-3">
             <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid] || isApprovedForAll)}>Stake Selected</button>
