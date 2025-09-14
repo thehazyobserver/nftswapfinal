@@ -22,27 +22,34 @@ export default function StonerFeePoolActions() {
     return provider.getSigner()
   }
 
-  // Fetch NFTs
-  useEffect(() => {
-    const fetchNFTs = async () => {
-      if (!window.ethereum) return
+  // Fetch NFTs function (separate for refresh capability)
+  const fetchNFTs = async () => {
+    if (!window.ethereum) return
+    
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const addr = await signer.getAddress()
       
+      const nftContract = new ethers.Contract(STONER_NFT_ADDRESS, StonerNFTABI, provider)
+      const feePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
+      
+      // Check approval
+      const approvedAll = await nftContract.isApprovedForAll(addr, STONER_FEE_POOL_ADDRESS)
+      setIsApprovedForAll(approvedAll)
+      
+      // Get wallet NFTs
+      const balance = await nftContract.balanceOf(addr)
+      console.log('🔢 Stoner NFT balance:', balance.toString())
+      const walletTokens = []
+      
+      // Try enumerable approach first
+      let foundViaEnumerable = false
       try {
-        const provider = new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        const addr = await signer.getAddress()
-        
-        const nftContract = new ethers.Contract(STONER_NFT_ADDRESS, StonerNFTABI, provider)
-        const feePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
-        
-        // Check approval
-        const approvedAll = await nftContract.isApprovedForAll(addr, STONER_FEE_POOL_ADDRESS)
-        setIsApprovedForAll(approvedAll)
-        
-        // Get wallet NFTs
-        const balance = await nftContract.balanceOf(addr)
-        console.log('🔢 Stoner NFT balance:', balance.toString())
-        const walletTokens = []
+        // Check if tokenOfOwnerByIndex exists
+        await nftContract.tokenOfOwnerByIndex(addr, 0)
+        foundViaEnumerable = true
+        console.log('✅ Using tokenOfOwnerByIndex approach')
         
         // Try to get all tokens owned (up to 50 max for performance)
         for (let i = 0; i < Math.min(Number(balance), 50); i++) {
@@ -70,54 +77,106 @@ export default function StonerFeePoolActions() {
             
             walletTokens.push({ tokenId: tokenId.toString(), image })
           } catch (e) {
-            break
+            console.warn(`Failed to get token at index ${i}:`, e.message)
+            // Don't break - there might be gaps in token indices
+            continue
           }
         }
-        
-        console.log(`✅ Loaded ${walletTokens.length}/${balance} wallet Stoner NFTs`)
-        setWalletNFTs(walletTokens)
-        
-        // Get staked NFTs
-        try {
-          const stakedTokenIdsRaw = await feePoolContract.getStakedTokens(addr)
-          // Convert proxy result to actual array 
-          const stakedTokenIds = Array.from(stakedTokenIdsRaw).map(id => id.toString())
-          console.log('🔥 Staked Stoner NFT token IDs:', stakedTokenIds)
-          const stakedTokens = []
-          
-          for (const tokenId of stakedTokenIds) {
-            let image = null
-            try {
-              let uri = await nftContract.tokenURI(tokenId)
-              if (uri.startsWith('ipfs://')) {
-                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-              }
-              if (uri.startsWith('http')) {
-                const resp = await fetch(uri)
-                const meta = await resp.json()
-                image = meta.image || meta.image_url
-                if (image && image.startsWith('ipfs://')) {
-                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                }
-              }
-            } catch (e) {
-              console.warn('Failed to fetch metadata for staked token', tokenId.toString())
-            }
-            
-            stakedTokens.push({ tokenId: tokenId.toString(), image })
-          }
-          
-          console.log(`✅ Loaded ${stakedTokens.length} staked Stoner NFTs:`, stakedTokens.map(t => t.tokenId))
-          setStakedNFTs(stakedTokens)
-        } catch (e) {
-          console.warn('Failed to fetch staked NFTs:', e)
-        }
-        
       } catch (e) {
-        console.error('Failed to fetch NFTs:', e)
+        console.log('❌ tokenOfOwnerByIndex not supported, trying alternative approach')
+        foundViaEnumerable = false
       }
+      
+      // If enumerable didn't work or found fewer tokens than expected, try brute force
+      if (!foundViaEnumerable || walletTokens.length < Number(balance)) {
+        console.log('🔍 Trying brute force token discovery...')
+        const maxTokenId = 10000 // Reasonable upper bound for most NFT collections
+        let foundCount = 0
+        
+        for (let tokenId = 0; tokenId <= maxTokenId && foundCount < Number(balance); tokenId++) {
+          try {
+            const owner = await nftContract.ownerOf(tokenId)
+            if (owner.toLowerCase() === addr.toLowerCase()) {
+              console.log(`📝 Found wallet token via brute force: #${tokenId}`)
+              foundCount++
+              
+              // Check if we already have this token
+              const alreadyAdded = walletTokens.some(t => t.tokenId === tokenId.toString())
+              if (!alreadyAdded) {
+                let image = null
+                try {
+                  let uri = await nftContract.tokenURI(tokenId)
+                  if (uri.startsWith('ipfs://')) {
+                    uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                  if (uri.startsWith('http')) {
+                    const resp = await fetch(uri)
+                    const meta = await resp.json()
+                    image = meta.image || meta.image_url
+                    if (image && image.startsWith('ipfs://')) {
+                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Failed to fetch metadata for token', tokenId.toString())
+                }
+                
+                walletTokens.push({ tokenId: tokenId.toString(), image })
+              }
+            }
+          } catch (e) {
+            // Token doesn't exist or not owned, continue
+            continue
+          }
+        }
+      }
+      
+      console.log(`✅ Loaded ${walletTokens.length}/${balance} wallet Stoner NFTs`)
+      setWalletNFTs(walletTokens)
+      
+      // Get staked NFTs
+      try {
+        const stakedTokenIdsRaw = await feePoolContract.getStakedTokens(addr)
+        // Convert proxy result to actual array 
+        const stakedTokenIds = Array.from(stakedTokenIdsRaw).map(id => id.toString())
+        console.log('🔥 Staked Stoner NFT token IDs:', stakedTokenIds)
+        const stakedTokens = []
+        
+        for (const tokenId of stakedTokenIds) {
+          let image = null
+          try {
+            let uri = await nftContract.tokenURI(tokenId)
+            if (uri.startsWith('ipfs://')) {
+              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+            }
+            if (uri.startsWith('http')) {
+              const resp = await fetch(uri)
+              const meta = await resp.json()
+              image = meta.image || meta.image_url
+              if (image && image.startsWith('ipfs://')) {
+                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to fetch metadata for staked token', tokenId.toString())
+          }
+          
+          stakedTokens.push({ tokenId: tokenId.toString(), image })
+        }
+        
+        console.log(`✅ Loaded ${stakedTokens.length} staked Stoner NFTs:`, stakedTokens.map(t => t.tokenId))
+        setStakedNFTs(stakedTokens)
+      } catch (e) {
+        console.warn('Failed to fetch staked NFTs:', e)
+      }
+      
+    } catch (e) {
+      console.error('Failed to fetch NFTs:', e)
     }
-    
+  }
+
+  // Fetch NFTs on component mount
+  useEffect(() => {
     fetchNFTs()
   }, [])
 
@@ -146,6 +205,9 @@ export default function StonerFeePoolActions() {
       await tx.wait()
       setStatus('Staking successful!')
       setSelectedTokens([])
+      
+      // Refresh NFT lists
+      await fetchNFTs()
     } catch (e) {
       setStatus('Staking failed: ' + (e.reason || e.message))
     }
@@ -178,6 +240,9 @@ export default function StonerFeePoolActions() {
       await tx.wait()
       setStatus('Unstaking successful!')
       setSelectedStakedTokens([])
+      
+      // Refresh NFT lists
+      await fetchNFTs()
     } catch (e) {
       setStatus('Unstaking failed: ' + (e.reason || e.message))
     }
