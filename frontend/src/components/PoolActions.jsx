@@ -596,7 +596,11 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
 
     // Check if there are enough pool NFTs available for swapping
     if (poolNFTs.length < selectedSwapTokens.length) {
-      setStatus(`❌ Insufficient liquidity: Only ${poolNFTs.length} NFT${poolNFTs.length !== 1 ? 's' : ''} available in pool, but you selected ${selectedSwapTokens.length}`)
+      if (poolNFTs.length === 0) {
+        setStatus(`❌ Cannot swap: Pool is empty! You need to stake some NFTs first to create liquidity for swapping.`)
+      } else {
+        setStatus(`❌ Insufficient liquidity: Only ${poolNFTs.length} NFT${poolNFTs.length !== 1 ? 's' : ''} available in pool, but you selected ${selectedSwapTokens.length}. Stake more NFTs or reduce your selection.`)
+      }
       return
     }
     
@@ -877,6 +881,21 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           </div>
         </div>
         <div>
+          {poolNFTs.length === 0 && (
+            <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500/20 rounded-lg">
+              <div className="flex items-start gap-2">
+                <div className="text-blue-400 text-lg">ℹ️</div>
+                <div>
+                  <div className="font-semibold text-blue-400 mb-1">How to Enable Swapping:</div>
+                  <div className="text-sm text-blue-300">
+                    1. <strong>Stake</strong> your NFTs first (above) to add them to the pool<br/>
+                    2. Other users can then <strong>swap</strong> their NFTs with yours<br/>
+                    3. You receive a receipt token that you can later unstake
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-2">
             <div className="font-semibold text-indigo-400">Swap Your NFT(s)</div>
             <div className="flex items-center gap-2">
@@ -919,14 +938,24 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           </div>
           <div className="flex items-center gap-3 mt-3">
             <button 
-              className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2" 
+              className={`px-4 py-2 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50 flex items-center gap-2 ${
+                poolNFTs.length === 0 
+                  ? 'bg-gradient-to-r from-gray-500 to-gray-600 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-indigo-500 to-blue-500'
+              }`}
               onClick={handleSwap} 
-              disabled={loading || selectedSwapTokens.length === 0}
+              disabled={loading || selectedSwapTokens.length === 0 || poolNFTs.length === 0}
+              title={poolNFTs.length === 0 ? 'Pool is empty - stake NFTs first to enable swapping' : ''}
             >
               {loading && (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
-              {loading ? 'Swapping...' : `Swap Selected (${selectedSwapTokens.length})`}
+              {poolNFTs.length === 0 
+                ? '⚠️ Pool Empty - Stake NFTs First' 
+                : loading 
+                  ? 'Swapping...' 
+                  : `Swap Selected (${selectedSwapTokens.length})`
+              }
             </button>
             {selectedSwapTokens.length > 0 && (
               <button 
