@@ -101,10 +101,12 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           collectionAddr,
           [
             "function balanceOf(address) view returns (uint256)",
+            "function ownerOf(uint256) view returns (address)",
             "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)",
             "function tokenURI(uint256) view returns (string)",
             "function getApproved(uint256) view returns (address)",
-            "function isApprovedForAll(address,address) view returns (bool)"
+            "function isApprovedForAll(address,address) view returns (bool)",
+            "function totalSupply() view returns (uint256)"
           ],
           provider
         )
@@ -119,13 +121,92 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           } catch {}
           setIsApprovedForAll(!!approvedAll)
 
-          // Get all token IDs first (parallel)
-          const tokenIdPromises = []
-          for (let i = 0; i < Number(balance); i++) {
-            tokenIdPromises.push(nftContract.tokenOfOwnerByIndex(addr, i))
+          let tokenIds = []
+          
+          // Try enumerable approach first
+          try {
+            console.log(`🔍 Trying enumerable approach for ${balance.toString()} tokens...`)
+            const tokenIdPromises = []
+            for (let i = 0; i < Number(balance); i++) {
+              tokenIdPromises.push(nftContract.tokenOfOwnerByIndex(addr, i))
+            }
+            tokenIds = await Promise.all(tokenIdPromises)
+            console.log(`✅ Enumerable approach successful, found tokens:`, tokenIds.map(id => id.toString()))
+          } catch (enumerableError) {
+            console.log(`❌ tokenOfOwnerByIndex not supported, using fallback scan for Stoner NFTs`)
+            console.log(`📊 Scanning for tokens owned by ${addr}...`)
+            
+            // Fallback: scan through token IDs to find owned tokens
+            try {
+              // Try to get total supply to know how many tokens exist
+              let maxTokenId = 10000 // Default fallback range
+              try {
+                const totalSupply = await nftContract.totalSupply()
+                maxTokenId = Math.min(Number(totalSupply) + 100, 10000) // Scan a bit beyond totalSupply but cap at 10k
+                console.log(`📈 Total supply: ${totalSupply.toString()}, scanning up to token ${maxTokenId}`)
+              } catch {
+                console.log(`📈 Total supply not available, scanning up to token ${maxTokenId}`)
+              }
+
+              const ownedTokens = []
+              const batchSize = 50 // Check 50 tokens at a time to avoid rate limits
+              
+              for (let startId = 1; startId <= maxTokenId; startId += batchSize) {
+                const endId = Math.min(startId + batchSize - 1, maxTokenId)
+                const batch = []
+                
+                // Create batch of ownership checks
+                for (let tokenId = startId; tokenId <= endId; tokenId++) {
+                  batch.push(
+                    nftContract.ownerOf(tokenId)
+                      .then(owner => ({ tokenId, owner }))
+                      .catch(() => null) // Token doesn't exist or other error
+                  )
+                }
+                
+                // Wait for batch to complete
+                const batchResults = await Promise.all(batch)
+                
+                // Filter for tokens owned by user
+                const ownedInBatch = batchResults
+                  .filter(result => result && result.owner.toLowerCase() === addr.toLowerCase())
+                  .map(result => BigInt(result.tokenId))
+                
+                ownedTokens.push(...ownedInBatch)
+                
+                // Log progress for large scans
+                if (startId % 200 === 1) {
+                  console.log(`🔍 Scanned tokens ${startId}-${endId}, found ${ownedTokens.length} owned tokens so far`)
+                }
+                
+                // Stop if we found all the tokens according to balance
+                if (ownedTokens.length >= Number(balance)) {
+                  console.log(`✅ Found all ${ownedTokens.length} tokens, stopping scan early`)
+                  break
+                }
+              }
+              
+              tokenIds = ownedTokens
+              console.log(`✅ Fallback scan complete, found ${tokenIds.length} tokens:`, tokenIds.map(id => id.toString()))
+              
+              if (tokenIds.length !== Number(balance)) {
+                console.warn(`⚠️ Token count mismatch: balance=${balance.toString()}, found=${tokenIds.length}`)
+              }
+            } catch (fallbackError) {
+              console.error('❌ Fallback token scanning failed:', fallbackError)
+              tokenIds = []
+            }
           }
-          const tokenIds = await Promise.all(tokenIdPromises)
+          
           console.log(`🔢 Token IDs found:`, tokenIds.map(id => id.toString()))
+
+          if (tokenIds.length === 0) {
+            console.log(`📭 No tokens found for user`)
+            setWalletNFTs([])
+            setApprovedMap({})
+            setWalletLoading(false)
+            return
+          }
 
           // Batch fetch all token URIs (parallel)
           const tokenUriPromises = tokenIds.map(tokenId => 
