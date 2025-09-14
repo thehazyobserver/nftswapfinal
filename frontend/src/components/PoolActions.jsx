@@ -25,6 +25,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   const [receiptLoading, setReceiptLoading] = useState(false)
   const [poolLoading, setPoolLoading] = useState(false)
 
+  // 🎯 HARDCODED STONER NFT CONTRACT FOR STAKING
+  const STONER_NFT_CONTRACT = "0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb"
+
   // Helper to get signer
   const getSigner = async () => {
     if (!window.ethereum) throw new Error('Wallet not found')
@@ -89,16 +92,20 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         } catch {}
       }
       setAddress(addr)
-      // Fetch wallet NFTs (ERC721)
-      let collectionAddr = null
+      // Fetch wallet NFTs from Stoner contract (always check Stoner NFTs for user's wallet)
+      // The SwapPool determines what's available for swapping, but users always see their Stoner NFTs
+      let swapCollectionAddr = null
       try {
-        collectionAddr = await (new ethers.Contract(swapPool, SwapPoolABI, provider)).nftCollection()
-        console.log(`🏷️ NFT Collection Address:`, collectionAddr)
+        swapCollectionAddr = await (new ethers.Contract(swapPool, SwapPoolABI, provider)).nftCollection()
+        console.log(`🏷️ SwapPool NFT Collection Address:`, swapCollectionAddr)
         console.log(`👤 User Address:`, addr)
         console.log(`🏊 SwapPool Address:`, swapPool)
-        setNftCollection(collectionAddr)
-        const nftContract = new ethers.Contract(
-          collectionAddr,
+        console.log(`🎯 Checking Stoner NFTs in wallet:`, STONER_NFT_CONTRACT)
+        setNftCollection(swapCollectionAddr)
+        
+        // Always check Stoner NFT contract for wallet NFTs
+        const stonerNftContract = new ethers.Contract(
+          STONER_NFT_CONTRACT,
           [
             "function balanceOf(address) view returns (uint256)",
             "function ownerOf(uint256) view returns (address)",
@@ -111,13 +118,13 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           provider
         )
         if (addr) {
-          const balance = await nftContract.balanceOf(addr)
-          console.log(`🎯 NFT Balance for ${addr}:`, balance.toString())
+          const balance = await stonerNftContract.balanceOf(addr)
+          console.log(`🎯 Stoner NFT Balance for ${addr}:`, balance.toString())
           const tokens = []
-          // Check isApprovedForAll
+          // Check isApprovedForAll - check if Stoner NFTs are approved for the SwapPool
           let approvedAll = false
           try {
-            approvedAll = await nftContract.isApprovedForAll(addr, swapPool)
+            approvedAll = await stonerNftContract.isApprovedForAll(addr, swapPool)
           } catch {}
           setIsApprovedForAll(!!approvedAll)
 
@@ -208,20 +215,20 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             return
           }
 
-          // Batch fetch all token URIs (parallel)
+          // Batch fetch all token URIs (parallel) from Stoner NFT contract
           const tokenUriPromises = tokenIds.map(tokenId => 
-            nftContract.tokenURI(tokenId).catch(err => {
-              console.warn(`Failed to get URI for token ${tokenId}:`, err)
+            stonerNftContract.tokenURI(tokenId).catch(err => {
+              console.warn(`Failed to get URI for Stoner token ${tokenId}:`, err)
               return null
             })
           )
           const tokenUris = await Promise.all(tokenUriPromises)
-          console.log(`🌐 Token URIs fetched:`, tokenUris.length)
+          console.log(`🌐 Stoner NFT URIs fetched:`, tokenUris.length)
 
-          // Batch check approvals (parallel)
+          // Batch check approvals (parallel) - check if Stoner NFTs are approved for SwapPool
           const approvalPromises = tokenIds.map(tokenId => {
             if (approvedAll) return Promise.resolve(true)
-            return nftContract.getApproved(tokenId).then(approved => 
+            return stonerNftContract.getApproved(tokenId).then(approved => 
               approved && swapPool && approved.toLowerCase() === swapPool.toLowerCase()
             ).catch(() => false)
           })
@@ -270,7 +277,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             const batchResults = await Promise.all(batchPromises)
             walletTokens.push(...batchResults)
           }
-          console.log(`✅ Final wallet tokens:`, walletTokens.length, walletTokens)
+          console.log(`✅ Final Stoner NFT tokens:`, walletTokens.length, walletTokens)
           setWalletNFTs(walletTokens)
           setApprovedMap(approvedMapTemp)
           setWalletLoading(false)
@@ -568,8 +575,8 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
       
-      // Create NFT contract instance
-      const nftContract = new ethers.Contract(nftCollection, [
+      // Create NFT contract instance for Stoner NFTs
+      const nftContract = new ethers.Contract(STONER_NFT_CONTRACT, [
         "function approve(address,uint256)",
         "function getApproved(uint256) view returns (address)",
         "function ownerOf(uint256) view returns (address)",
@@ -738,9 +745,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                     <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
                     <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
                   </button>
-                {nftCollection && swapPool && !isApprovedForAll && (
+                {swapPool && !isApprovedForAll && (
                   <ApproveNFTButton
-                    nftAddress={nftCollection}
+                    nftAddress={STONER_NFT_CONTRACT}
                     tokenId={nft.tokenId}
                     spender={swapPool}
                     provider={externalProvider}
@@ -754,13 +761,13 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           </div>
           <div className="flex items-center gap-3 mt-3">
             <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid] || isApprovedForAll)}>Stake Selected</button>
-            {nftCollection && swapPool && !isApprovedForAll && (
+            {swapPool && !isApprovedForAll && (
               <button className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50" disabled={approvingAll || loading} onClick={async () => {
                 setApprovingAll(true)
                 try {
                   if (!window.ethereum) throw new Error('Wallet not found')
                   const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner()
-                  const nft = new ethers.Contract(nftCollection, ["function setApprovalForAll(address,bool) external"], signer)
+                  const nft = new ethers.Contract(STONER_NFT_CONTRACT, ["function setApprovalForAll(address,bool) external"], signer)
                   const tx = await nft.setApprovalForAll(swapPool, true)
                   await tx.wait()
                   setIsApprovedForAll(true)
