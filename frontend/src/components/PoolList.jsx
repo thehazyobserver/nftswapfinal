@@ -29,7 +29,6 @@ export default function PoolList() {
 
   useEffect(() => {
     const init = async () => {
-      // Prefer using injected wallet RPC (MetaMask) when available
       try {
         if (window.ethereum) {
           const p = new ethers.BrowserProvider(window.ethereum)
@@ -40,13 +39,13 @@ export default function PoolList() {
             const chainId = parseInt(chainIdHex, 16)
             if (chainId !== 146) {
               console.warn('Connected chainId', chainId, 'expected 146 (Sonic)')
-              // only warn; user can still switch in wallet
-              // but we surface an alert when they try to load pools
             }
           } catch (e) {
             console.warn('Could not read chainId from injected provider', e)
           }
-        } else if (import.meta.env.VITE_RPC_URL) {
+        } 
+        // Always set a fallback provider for read-only mode
+        if (!window.ethereum && import.meta.env.VITE_RPC_URL) {
           const p = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL)
           setProvider(p)
         }
