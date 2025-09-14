@@ -9,7 +9,8 @@ const collectionImages = {
 }
 
 export default function NFTCollectionImage({ address, size = 48 }) {
+  const [broken, setBroken] = React.useState(false)
   const img = collectionImages[address?.toLowerCase()]
-  if (!img) return <div style={{ width: size, height: size }} className="bg-gray-200 rounded" />
-  return <img src={img} alt="NFT Collection" style={{ width: size, height: size, borderRadius: 8 }} />
+  if (!img || broken) return <div style={{ width: size, height: size }} className="bg-gray-200 rounded" />
+  return <img src={img} alt="NFT Collection" style={{ width: size, height: size, borderRadius: 8 }} onError={() => setBroken(true)} />
 }

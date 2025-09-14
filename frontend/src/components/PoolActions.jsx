@@ -10,8 +10,8 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
   const [walletNFTs, setWalletNFTs] = useState([])
   const [stakedNFTs, setStakedNFTs] = useState([])
   const [receiptNFTs, setReceiptNFTs] = useState([])
-  const [selectedWalletToken, setSelectedWalletToken] = useState(null)
-  const [selectedReceiptToken, setSelectedReceiptToken] = useState(null)
+  const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
+  const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
   const [selectedSwapToken, setSelectedSwapToken] = useState(null)
   const [address, setAddress] = useState(null)
 
@@ -92,14 +92,19 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
     // eslint-disable-next-line
   }, [swapPool, stakeReceipt])
 
-  // Stake NFT
+  // Batch Stake
   const handleStake = async () => {
     setStatus('')
     setLoading(true)
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
-      const tx = await contract.stakeNFT(selectedWalletToken)
+      let tx
+      if (selectedWalletTokens.length > 1 && contract.stakeNFTBatch) {
+        tx = await contract.stakeNFTBatch(selectedWalletTokens)
+      } else {
+        tx = await contract.stakeNFT(selectedWalletTokens[0])
+      }
       setStatus('Staking...')
       await tx.wait()
       setStatus('Stake successful!')
@@ -109,14 +114,19 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
     setLoading(false)
   }
 
-  // Unstake NFT
+  // Batch Unstake
   const handleUnstake = async () => {
     setStatus('')
     setLoading(true)
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
-      const tx = await contract.unstakeNFT(selectedReceiptToken)
+      let tx
+      if (selectedReceiptTokens.length > 1 && contract.unstakeNFTBatch) {
+        tx = await contract.unstakeNFTBatch(selectedReceiptTokens)
+      } else {
+        tx = await contract.unstakeNFT(selectedReceiptTokens[0])
+      }
       setStatus('Unstaking...')
       await tx.wait()
       setStatus('Unstake successful!')
@@ -167,30 +177,30 @@ export default function PoolActions({ swapPool, stakeReceipt }) {
       <h4 className="font-bold text-lg mb-4 text-indigo-700 tracking-wide">Pool Actions</h4>
       <div className="space-y-6">
         <div>
-          <div className="font-semibold mb-2 text-green-700">Stake NFT</div>
+          <div className="font-semibold mb-2 text-green-700">Stake NFT(s)</div>
           <div className="flex gap-3 flex-wrap">
             {walletNFTs.length === 0 && <div className="text-gray-400 italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-50 to-white shadow-sm transition-all ${selectedWalletToken === nft.tokenId ? 'border-green-500 scale-105' : 'border-gray-200 hover:border-green-300'}`} onClick={() => setSelectedWalletToken(nft.tokenId)} disabled={loading}>
+              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-50 to-white shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-500 scale-105' : 'border-gray-200 hover:border-green-300'}`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
                 <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
                 <div className="text-xs text-center text-gray-700 font-mono">#{nft.tokenId}</div>
               </button>
             ))}
           </div>
-          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || !selectedWalletToken}>Stake</button>
+          <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0}>Stake Selected</button>
         </div>
         <div>
-          <div className="font-semibold mb-2 text-red-700">Unstake NFT</div>
+          <div className="font-semibold mb-2 text-red-700">Unstake NFT(s)</div>
           <div className="flex gap-3 flex-wrap">
             {receiptNFTs.length === 0 && <div className="text-gray-400 italic">No receipt tokens</div>}
             {receiptNFTs.map(nft => (
-              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-red-50 to-white shadow-sm transition-all ${selectedReceiptToken === nft.tokenId ? 'border-red-500 scale-105' : 'border-gray-200 hover:border-red-300'}`} onClick={() => setSelectedReceiptToken(nft.tokenId)} disabled={loading}>
+              <button key={nft.tokenId} className={`border-2 rounded-xl p-1 bg-gradient-to-br from-red-50 to-white shadow-sm transition-all ${selectedReceiptTokens.includes(nft.tokenId) ? 'border-red-500 scale-105' : 'border-gray-200 hover:border-red-300'}`} onClick={() => setSelectedReceiptTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
                 <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
                 <div className="text-xs text-center text-gray-700 font-mono">#{nft.tokenId}</div>
               </button>
             ))}
           </div>
-          <button className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleUnstake} disabled={loading || !selectedReceiptToken}>Unstake</button>
+          <button className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleUnstake} disabled={loading || selectedReceiptTokens.length === 0}>Unstake Selected</button>
         </div>
         <div>
           <div className="font-semibold mb-2 text-yellow-700">Claim Rewards</div>

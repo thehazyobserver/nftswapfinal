@@ -5,11 +5,22 @@ import PoolDetail from './PoolDetail'
 import NFTCollectionImage from './NFTCollectionImage'
 import StonerFeePoolActions from './StonerFeePoolActions'
 
+// Helper to fetch ERC721 name
+async function fetchCollectionName(address, provider) {
+  try {
+    const nft = new ethers.Contract(address, ["function name() view returns (string)"], provider)
+    return await nft.name()
+  } catch {
+    return 'Unknown Collection'
+  }
+}
+
 export default function PoolList() {
   const [provider, setProvider] = useState(null)
   const [signer, setSigner] = useState(null)
   const [address, setAddress] = useState(null)
   const [pools, setPools] = useState([])
+  const [poolNames, setPoolNames] = useState({})
   const [loading, setLoading] = useState(false)
   const [selectedPool, setSelectedPool] = useState(null)
 
@@ -101,45 +112,43 @@ export default function PoolList() {
 
       // Prefer getAllPools if available, otherwise fall back to getAllCollections + getPoolInfo
       let allPools = []
-      if (contract.getAllPools) {
+      if (contract.getActivePools) {
         try {
-          allPools = await contract.getAllPools()
+          allPools = await contract.getActivePools()
         } catch (e) {
-          // ignore and fallback
+          allPools = []
+        }
+      } else if (contract.getAllPools) {
+        try {
+          allPools = (await contract.getAllPools()).filter(p => p.active)
+        } catch (e) {
           allPools = []
         }
       }
 
-      if (!allPools || allPools.length === 0) {
-        const collections = await contract.getAllCollections()
-        const mapped = []
-        for (const c of collections) {
-          try {
-            const info = await contract.getPoolInfo(c)
-            mapped.push({
-              nftCollection: c,
-              swapPool: info.swapPool,
-              stakeReceipt: info.stakeReceipt,
-              createdAt: new Date(Number(info.createdAt) * 1000).toLocaleString(),
-              creator: info.creator,
-              active: info.exists
-            })
-          } catch (e) {
-            console.warn('Failed to getPoolInfo for', c, e)
-          }
+      // Deduplicate by nftCollection, keep latest by createdAt
+      const latestByCollection = {}
+      for (const p of allPools) {
+        if (!latestByCollection[p.nftCollection] || Number(p.createdAt) > Number(latestByCollection[p.nftCollection].createdAt)) {
+          latestByCollection[p.nftCollection] = p
         }
-        setPools(mapped)
-      } else {
-        const mapped = allPools.map(p => ({
-          nftCollection: p.nftCollection,
-          swapPool: p.swapPool,
-          stakeReceipt: p.stakeReceipt,
-          createdAt: new Date(Number(p.createdAt) * 1000).toLocaleString(),
-          creator: p.creator,
-          active: p.active
-        }))
-        setPools(mapped)
       }
+      const mapped = Object.values(latestByCollection).map(p => ({
+        nftCollection: p.nftCollection,
+        swapPool: p.swapPool,
+        stakeReceipt: p.stakeReceipt,
+        createdAt: new Date(Number(p.createdAt) * 1000).toLocaleString(),
+        creator: p.creator,
+        active: p.active
+      }))
+      setPools(mapped)
+
+      // Fetch collection names
+      const names = {}
+      for (const p of mapped) {
+        names[p.nftCollection] = await fetchCollectionName(p.nftCollection, provider)
+      }
+      setPoolNames(names)
     } catch (err) {
       console.error('Failed to fetch pools', err)
       // Display helpful hints
@@ -155,8 +164,9 @@ export default function PoolList() {
   return (
     <div>
       <StonerFeePoolActions />
-  <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm text-gray-600">Factory: {factoryAddress || 'Not set'}</div>
+        <div className="flex gap-2 absolute top-4 right-6 z-50">
           <button className="px-4 py-2 bg-indigo-600 text-white rounded" onClick={connect}>
             {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
           </button>
@@ -164,7 +174,6 @@ export default function PoolList() {
             {loading ? 'Loading…' : 'Load Pools'}
           </button>
         </div>
-        <div className="text-sm text-gray-600">Factory: {factoryAddress || 'Not set'}</div>
       </div>
 
       {pools.length === 0 ? (
@@ -179,7 +188,7 @@ export default function PoolList() {
             >
               <NFTCollectionImage address={p.nftCollection} size={56} />
               <div className="flex-1">
-                <div className="font-semibold text-lg text-indigo-700 mb-1">Collection: <span className="font-mono text-gray-800">{p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}</span></div>
+                <div className="font-semibold text-lg text-indigo-700 mb-1">{poolNames[p.nftCollection] || 'Collection'} <span className="font-mono text-gray-800">{p.nftCollection.slice(0, 6)}...{p.nftCollection.slice(-4)}</span></div>
                 <div className="text-xs text-gray-500">SwapPool: <span className="font-mono">{p.swapPool.slice(0, 6)}...{p.swapPool.slice(-4)}</span></div>
                 <div className="text-xs text-gray-500">Receipt: <span className="font-mono">{p.stakeReceipt.slice(0, 6)}...{p.stakeReceipt.slice(-4)}</span></div>
                 <div className="text-xs text-gray-400 mt-1">Created: {p.createdAt}</div>
