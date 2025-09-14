@@ -59,6 +59,18 @@ export default function PoolList() {
     if (!provider) return alert('No provider')
     setLoading(true)
     try {
+      // Quick network / contract validation
+      try {
+        const code = await provider.send('eth_getCode', [factoryAddress, 'latest'])
+        if (!code || code === '0x' || code === '0x0') {
+          setLoading(false)
+          return alert(`No contract deployed at ${factoryAddress}. Make sure the address is correct and you're connected to the right chain.`)
+        }
+      } catch (err) {
+        console.warn('eth_getCode failed', err)
+        // continue - provider might not support send in this environment
+      }
+
       const contract = new ethers.Contract(factoryAddress, FactoryABI, provider)
 
       // Prefer getAllPools if available, otherwise fall back to getAllCollections + getPoolInfo
@@ -103,8 +115,13 @@ export default function PoolList() {
         setPools(mapped)
       }
     } catch (err) {
-      console.error(err)
-      alert('Failed to fetch pools: ' + (err.message || String(err)))
+      console.error('Failed to fetch pools', err)
+      // Display helpful hints
+      if (err.code === 'BAD_DATA') {
+        alert('Failed to decode on-chain result. This often means the contract ABI does not match or you are connected to the wrong RPC/network.')
+      } else {
+        alert('Failed to fetch pools: ' + (err.message || String(err)))
+      }
     }
     setLoading(false)
   }
