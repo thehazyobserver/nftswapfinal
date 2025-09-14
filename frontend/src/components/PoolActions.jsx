@@ -611,7 +611,19 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
 
   return (
     <div className="mt-6 p-4 sm:p-6 bg-secondary dark:bg-secondary rounded-2xl shadow-xl border border-accent/10">
-      <h4 className="font-bold text-lg mb-4 text-accent tracking-wide">Pool Actions</h4>
+      <div className="flex justify-between items-center mb-4">
+        <h4 className="font-bold text-lg text-accent tracking-wide">Pool Actions</h4>
+        <button 
+          onClick={refreshNFTs}
+          className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center gap-1.5"
+          title="Refresh all NFTs"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
       <div className="space-y-6">
         <div>
           <div className="flex items-center justify-between mb-2">
