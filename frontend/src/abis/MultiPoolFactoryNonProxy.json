@@ -1,0 +1,50 @@
+[
+  {
+    "inputs": [],
+    "name": "getAllPools",
+    "outputs": [
+      {
+        "components": [
+          {"internalType":"address","name":"nftCollection","type":"address"},
+          {"internalType":"address","name":"swapPool","type":"address"},
+          {"internalType":"address","name":"stakeReceipt","type":"address"},
+          {"internalType":"uint256","name":"createdAt","type":"uint256"},
+          {"internalType":"address","name":"creator","type":"address"},
+          {"internalType":"bool","name":"active","type":"bool"}
+        ],
+        "internalType": "struct MultiPoolFactoryNonProxy.PoolData[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [ {"internalType":"address","name":"nftCollection","type":"address"} ],
+    "name": "getPoolInfo",
+    "outputs": [
+      {
+        "components": [
+          {"internalType":"address","name":"swapPool","type":"address"},
+          {"internalType":"address","name":"stakeReceipt","type":"address"},
+          {"internalType":"bool","name":"exists","type":"bool"},
+          {"internalType":"uint256","name":"createdAt","type":"uint256"},
+          {"internalType":"address","name":"creator","type":"address"}
+        ],
+        "internalType":"struct MultiPoolFactoryNonProxy.PoolInfo",
+        "name":"",
+        "type":"tuple"
+      }
+    ],
+    "stateMutability":"view",
+    "type":"function"
+  },
+  {
+    "inputs": [],
+    "name": "getAllCollections",
+    "outputs": [ {"internalType":"address[]","name":"","type":"address[]"} ],
+    "stateMutability":"view",
+    "type":"function"
+  }
+]
