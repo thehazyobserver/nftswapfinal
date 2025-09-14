@@ -407,6 +407,7 @@ contract SwapPoolNative is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     }
 
     // -------------------- STAKE --------------------
+
     function stakeNFT(uint256 tokenId)
         external
         whenNotPaused
@@ -423,6 +424,38 @@ contract SwapPoolNative is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
         totalStaked++;
         emit Staked(msg.sender, tokenId, receiptTokenId);
+    }
+
+    // -------------------- BATCH STAKE --------------------
+    function stakeNFTBatch(uint256[] calldata tokenIds)
+        external
+        whenNotPaused
+        onlyInitialized
+        updateReward(msg.sender)
+    {
+        uint256 n = tokenIds.length;
+        require(n > 0 && n <= maxBatchSize, "Invalid batch size");
+        _checkForDuplicates(tokenIds);
+
+        // Pre-validate ownership and approval
+        for (uint256 i = 0; i < n; ++i) {
+            uint256 tokenId = tokenIds[i];
+            require(IERC721(nftCollection).ownerOf(tokenId) == msg.sender, "Not token owner");
+        }
+
+        for (uint256 i = 0; i < n; ++i) {
+            uint256 tokenId = tokenIds[i];
+            IERC721(nftCollection).transferFrom(msg.sender, address(this), tokenId);
+            uint256 receiptTokenId = IReceiptContract(receiptContract).mint(msg.sender, tokenId);
+
+            stakeInfos[receiptTokenId] = StakeInfo(msg.sender, block.timestamp, true);
+            userStakes[msg.sender].push(receiptTokenId);
+            receiptToOriginalToken[receiptTokenId] = tokenId;
+            originalToReceiptToken[tokenId] = receiptTokenId;
+
+            totalStaked++;
+            emit Staked(msg.sender, tokenId, receiptTokenId);
+        }
     }
 
     function unstakeNFT(uint256 receiptTokenId)
