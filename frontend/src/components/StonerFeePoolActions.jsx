@@ -64,21 +64,26 @@ export default function StonerFeePoolActions() {
         )
         const balance = await nftContract.balanceOf(addr)
         const tokens = []
+        let usedFallback = false
         for (let i = 0; i < Number(balance); i++) {
-          const tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
+          let tokenId = null
+          try {
+            tokenId = await nftContract.tokenOfOwnerByIndex(addr, i)
+          } catch (err) {
+            // tokenOfOwnerByIndex not supported
+            usedFallback = true
+            break
+          }
           let image = null
           try {
             let uri = await nftContract.tokenURI(tokenId)
-            // Handle ipfs:// URIs
             if (uri.startsWith('ipfs://')) {
               uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
             }
             if (uri.startsWith('http')) {
               const resp = await fetch(uri)
               const meta = await resp.json()
-              // Try image, image_url, or nested fields
               image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-              // Handle ipfs:// in image field
               if (image && image.startsWith('ipfs://')) {
                 image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
@@ -91,7 +96,35 @@ export default function StonerFeePoolActions() {
           } catch (err) {
             console.warn('Failed to fetch NFT metadata/image', tokenId, err)
           }
-          tokens.push({ tokenId: tokenId.toString(), image })
+          tokens.push({ tokenId: tokenId?.toString(), image })
+        }
+        // Fallback: scan a range of tokenIds if tokenOfOwnerByIndex is not supported
+        if (usedFallback && Number(balance) > 0) {
+          console.warn('tokenOfOwnerByIndex not supported, using fallback scan for Stoner NFTs')
+          // Try scanning tokenIds 0..(max 10000)
+          for (let tokenId = 0; tokenId < Math.min(10000, Number(balance) + 100); tokenId++) {
+            try {
+              const owner = await nftContract.ownerOf(tokenId)
+              if (owner && owner.toLowerCase() === addr.toLowerCase()) {
+                let image = null
+                try {
+                  let uri = await nftContract.tokenURI(tokenId)
+                  if (uri.startsWith('ipfs://')) {
+                    uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                  if (uri.startsWith('http')) {
+                    const resp = await fetch(uri)
+                    const meta = await resp.json()
+                    image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                    if (image && image.startsWith('ipfs://')) {
+                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                  }
+                } catch {}
+                tokens.push({ tokenId: tokenId.toString(), image })
+              }
+            } catch {}
+          }
         }
         setWalletNFTs(tokens)
       } catch (e) {
