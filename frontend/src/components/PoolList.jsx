@@ -11,7 +11,8 @@ export default function PoolList() {
   const [loading, setLoading] = useState(false)
   const [selectedPool, setSelectedPool] = useState(null)
 
-  const factoryAddress = import.meta.env.VITE_FACTORY_ADDRESS || ''
+  const factoryAddressEnv = import.meta.env.VITE_FACTORY_ADDRESS || ''
+  const [factoryAddress, setFactoryAddress] = useState(factoryAddressEnv)
 
   useEffect(() => {
     const init = async () => {
@@ -21,6 +22,18 @@ export default function PoolList() {
       } else if (import.meta.env.VITE_RPC_URL) {
         const p = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL)
         setProvider(p)
+      }
+      // If factory address not provided at build-time, try to fetch runtime config
+      if (!factoryAddressEnv) {
+        try {
+          const resp = await fetch('/contracts.json')
+          if (resp.ok) {
+            const json = await resp.json()
+            if (json.factoryAddress) setFactoryAddress(json.factoryAddress)
+          }
+        } catch (e) {
+          // ignore - will show message when attempting to load pools
+        }
       }
     }
     init()
@@ -42,7 +55,7 @@ export default function PoolList() {
   }
 
   const fetchPools = async () => {
-    if (!factoryAddress) return alert('Set VITE_FACTORY_ADDRESS in .env')
+  if (!factoryAddress) return alert('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
     if (!provider) return alert('No provider')
     setLoading(true)
     try {
