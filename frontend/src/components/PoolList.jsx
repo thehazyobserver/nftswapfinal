@@ -24,12 +24,14 @@ export default function PoolList() {
   const [loading, setLoading] = useState(false)
   const [selectedPool, setSelectedPool] = useState(null)
   const [providerError, setProviderError] = useState('')
+  const [providerLoading, setProviderLoading] = useState(true)
 
   const factoryAddressEnv = import.meta.env.VITE_FACTORY_ADDRESS || ''
   const [factoryAddress, setFactoryAddress] = useState(factoryAddressEnv)
 
   useEffect(() => {
     const init = async () => {
+      setProviderLoading(true)
       try {
         if (window.ethereum) {
           const p = new ethers.BrowserProvider(window.ethereum)
@@ -76,9 +78,12 @@ export default function PoolList() {
           }
         }
       } catch (e) {
-  setProviderError('Provider init failed: ' + (e.message || e.toString()))
-  console.warn('Provider init failed', e)
+        setProviderError('Provider init failed: ' + (e.message || e.toString()))
+        console.warn('Provider init failed', e)
       }
+      
+      setProviderLoading(false)
+      
       // If factory address not provided at build-time, try to fetch runtime config
       if (!factoryAddressEnv) {
         try {
@@ -111,9 +116,9 @@ export default function PoolList() {
   }
 
   const fetchPools = async () => {
-  if (!factoryAddress) return alert('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
+    if (!factoryAddress) return alert('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
     if (!provider) {
-      setProviderError('No provider available. Please connect your wallet or check your RPC settings.')
+      console.warn('fetchPools called without provider')
       return
     }
     setLoading(true)
@@ -186,9 +191,11 @@ export default function PoolList() {
     setLoading(false)
   }
 
-  // Auto-load pools on mount
+  // Auto-load pools when provider and factory address are ready
   useEffect(() => {
-    fetchPools();
+    if (provider && factoryAddress) {
+      fetchPools();
+    }
     // eslint-disable-next-line
   }, [provider, factoryAddress]);
 
@@ -199,7 +206,13 @@ export default function PoolList() {
           {address ? `${address.slice(0,6)}...${address.slice(-4)}` : 'Connect Wallet'}
         </button>
       </div>
-      {providerError && (
+      {providerLoading && (
+        <div className="p-4 bg-blue-50 text-blue-700 rounded shadow text-center font-semibold mb-6 mt-8 flex items-center justify-center gap-3">
+          <div className="w-5 h-5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
+          Connecting to Sonic Network...
+        </div>
+      )}
+      {!providerLoading && providerError && (
         <div className="p-4 bg-red-100 text-red-700 rounded shadow text-center font-semibold mb-6 mt-8">
           {providerError}
         </div>
