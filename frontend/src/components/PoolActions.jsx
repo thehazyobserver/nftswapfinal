@@ -342,6 +342,11 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       return
     }
     
+    if (!nftCollection) {
+      setStatus('NFT collection address not available')
+      return
+    }
+    
     setStatus('')
     setLoading(true)
     try {
@@ -349,7 +354,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
       
       // First, approve the NFT for transfer if not already approved
-      const nftContract = new ethers.Contract(collectionAddr, [
+      const nftContract = new ethers.Contract(nftCollection, [
         "function approve(address,uint256)",
         "function getApproved(uint256) view returns (address)",
         "function ownerOf(uint256) view returns (address)"
