@@ -167,12 +167,39 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   // Batch Stake
   const handleStake = async () => {
     setStatus('')
+    // Preflight checks for batch staking
+    if (selectedWalletTokens.length === 0) {
+      setStatus('Select at least one NFT to stake.')
+      return
+    }
+    if (selectedWalletTokens.length > 10) {
+      setStatus('You can only stake up to 10 NFTs at once.')
+      return
+    }
+    // Check for duplicates
+    const unique = new Set(selectedWalletTokens)
+    if (unique.size !== selectedWalletTokens.length) {
+      setStatus('Duplicate NFTs selected. Please select each NFT only once.')
+      return
+    }
+    // Check all are approved
+    if (!isApprovedForAll && !selectedWalletTokens.every(tid => approvedMap[tid])) {
+      setStatus('All selected NFTs must be approved before staking.')
+      return
+    }
     setLoading(true)
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
+      
+      // Add debug logging
+      console.log('Attempting to stake:', selectedWalletTokens.length, 'NFTs')
+      console.log('Token IDs:', selectedWalletTokens)
+      console.log('Contract has stakeNFTBatch:', typeof contract.stakeNFTBatch === 'function')
+      
       let tx
-      if (selectedWalletTokens.length > 1 && contract.stakeNFTBatch) {
+      if (selectedWalletTokens.length > 1) {
+        // Always use batch function for multiple tokens
         tx = await contract.stakeNFTBatch(selectedWalletTokens)
       } else {
         tx = await contract.stakeNFT(selectedWalletTokens[0])
@@ -180,8 +207,10 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       setStatus('Staking...')
       await tx.wait()
       setStatus('Stake successful!')
+      setSelectedWalletTokens([]) // Clear selection after successful stake
     } catch (e) {
       setStatus('Stake failed: ' + (e.reason || e.message))
+      console.error('Detailed stake error:', e)
     }
     setLoading(false)
   }

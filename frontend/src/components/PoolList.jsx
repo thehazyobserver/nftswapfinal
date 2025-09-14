@@ -139,34 +139,30 @@ export default function PoolList() {
 
       const contract = new ethers.Contract(factoryAddress, FactoryABI, provider)
 
-      // Prefer getAllPools if available, otherwise fall back to getAllCollections + getPoolInfo
+      // Get all pools from factory
       let allPools = []
-      if (contract.getActivePools) {
-        try {
-          allPools = await contract.getActivePools()
-        } catch (e) {
-          allPools = []
-        }
-      } else if (contract.getAllPools) {
-        try {
-          allPools = (await contract.getAllPools()).filter(p => p.active)
-        } catch (e) {
-          allPools = []
-        }
+      try {
+        allPools = await contract.getAllPools()
+        // Filter only active pools
+        allPools = allPools.filter(p => p.active)
+      } catch (e) {
+        console.error('Failed to get pools from factory:', e)
+        allPools = []
       }
 
       // Debug: log allPools before deduplication
-      console.log('All pools from contract:', allPools)
+      console.log('All active pools from contract:', allPools)
 
       // Deduplicate by nftCollection, keep latest by createdAt
       const latestByCollection = {}
       for (const p of allPools) {
-        if (!latestByCollection[p.nftCollection] || Number(p.createdAt) > Number(latestByCollection[p.nftCollection].createdAt)) {
-          latestByCollection[p.nftCollection] = p
+        const collectionKey = p.nftCollection.toLowerCase()
+        if (!latestByCollection[collectionKey] || Number(p.createdAt) > Number(latestByCollection[collectionKey].createdAt)) {
+          latestByCollection[collectionKey] = p
         }
       }
       // Debug: log deduplication result
-      console.log('Latest by collection:', latestByCollection)
+      console.log('Latest by collection (case-insensitive):', latestByCollection)
 
       const mapped = Object.values(latestByCollection).map(p => ({
         nftCollection: p.nftCollection,
