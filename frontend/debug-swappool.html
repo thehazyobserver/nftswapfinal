@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug SwapPool</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.15.0/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+    <h1>SwapPool Debug Tool</h1>
+    <button onclick="checkPoolSettings()">Check SwapPool Settings</button>
+    <button onclick="checkStonerPoolStakers()">Check StonerFeePool Stakers</button>
+    <div id="output"></div>
+
+    <script>
+        const SWAP_POOL_ADDRESS = '0x399a73dFa0a362441b7067413224E5765D168dD0'
+        const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
+        
+        const SWAP_POOL_ABI = [
+            'function getPoolInfo() view returns (address nftCollection, address receiptContract, address stonerPool, uint256 swapFeeInWei, uint256 stonerShare, uint256 poolSize, uint256 totalStaked)',
+            'function stonerShare() view returns (uint256)',
+            'function stonerPool() view returns (address)',
+            'function swapFeeInWei() view returns (uint256)'
+        ]
+        
+        const STONER_FEE_POOL_ABI = [
+            'function totalStaked() view returns (uint256)',
+            'function getPoolInfo() view returns (address nftAddress, uint256 totalStakedTokens, uint256 totalRewards, uint256 contractBalance)'
+        ]
+
+        async function checkPoolSettings() {
+            try {
+                await window.ethereum.request({ method: 'eth_requestAccounts' })
+                const provider = new ethers.BrowserProvider(window.ethereum)
+                
+                const swapPool = new ethers.Contract(SWAP_POOL_ADDRESS, SWAP_POOL_ABI, provider)
+                
+                const poolInfo = await swapPool.getPoolInfo()
+                const stonerShare = await swapPool.stonerShare()
+                const stonerPool = await swapPool.stonerPool()
+                const swapFee = await swapPool.swapFeeInWei()
+                
+                document.getElementById('output').innerHTML = `
+                    <h3>SwapPool Settings:</h3>
+                    <p><strong>NFT Collection:</strong> ${poolInfo[0]}</p>
+                    <p><strong>Receipt Contract:</strong> ${poolInfo[1]}</p>
+                    <p><strong>Stoner Pool:</strong> ${poolInfo[2]}</p>
+                    <p><strong>Swap Fee:</strong> ${ethers.formatEther(poolInfo[3])} ETH</p>
+                    <p><strong>Stoner Share:</strong> ${poolInfo[4]}%</p>
+                    <p><strong>Pool Size:</strong> ${poolInfo[5]} NFTs</p>
+                    <p><strong>Total Staked:</strong> ${poolInfo[6]} NFTs</p>
+                    <hr>
+                    <p><strong>Issue Analysis:</strong></p>
+                    <p>Stoner Share: ${stonerShare}% - ${stonerShare > 0 ? '⚠️ Will try to send ETH to StonerFeePool' : '✅ No ETH sent to StonerFeePool'}</p>
+                    <p>Expected Stoner Pool: ${STONER_FEE_POOL_ADDRESS}</p>
+                    <p>Actual Stoner Pool: ${stonerPool}</p>
+                    <p>Match: ${stonerPool.toLowerCase() === STONER_FEE_POOL_ADDRESS.toLowerCase() ? '✅ Correct' : '❌ Mismatch!'}</p>
+                `
+            } catch (error) {
+                document.getElementById('output').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`
+            }
+        }
+
+        async function checkStonerPoolStakers() {
+            try {
+                await window.ethereum.request({ method: 'eth_requestAccounts' })
+                const provider = new ethers.BrowserProvider(window.ethereum)
+                
+                const stonerFeePool = new ethers.Contract(STONER_FEE_POOL_ADDRESS, STONER_FEE_POOL_ABI, provider)
+                
+                const totalStaked = await stonerFeePool.totalStaked()
+                const poolInfo = await stonerFeePool.getPoolInfo()
+                
+                document.getElementById('output').innerHTML += `
+                    <h3>StonerFeePool Status:</h3>
+                    <p><strong>Total Staked:</strong> ${totalStaked} NFTs</p>
+                    <p><strong>Contract Balance:</strong> ${ethers.formatEther(poolInfo[3])} ETH</p>
+                    <p><strong>Status:</strong> ${totalStaked > 0 ? '✅ Can receive rewards' : '❌ Cannot receive rewards (NoStakers error)'}</p>
+                    <hr>
+                    <h3>Solution:</h3>
+                    ${totalStaked === 0n ? 
+                        '<p style="color: orange;">⚠️ Need to stake at least 1 Stoner NFT in the StonerFeePool to fix the swap issue!</p>' :
+                        '<p style="color: green;">✅ StonerFeePool can accept rewards - issue might be elsewhere.</p>'
+                    }
+                `
+            } catch (error) {
+                document.getElementById('output').innerHTML += `<p style="color: red;">StonerFeePool Error: ${error.message}</p>`
+            }
+        }
+    </script>
+</body>
+</html>

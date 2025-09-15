@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import PoolList from './components/PoolList'
+import SwapDiagnostics from './components/SwapDiagnostics'
 
 export default function App() {
   const [isDark, setIsDark] = useState(() => {
@@ -39,7 +40,10 @@ export default function App() {
           </div>
         </header>
         <main>
-          <PoolList />
+          <SwapDiagnostics />
+          <div className="mt-6">
+            <PoolList />
+          </div>
         </main>
       </div>
     </div>
