@@ -40,9 +40,22 @@ export default function StonerFeePoolActions() {
       const approvedAll = await nftContract.isApprovedForAll(addr, STONER_FEE_POOL_ADDRESS)
       setIsApprovedForAll(approvedAll)
       
-      // Get wallet NFTs
-      const balance = await nftContract.balanceOf(addr)
+      // Get wallet NFTs - use totalNFTsOwned for ERC404 tokens
+      const balance = await nftContract.totalNFTsOwned(addr)
       console.log('🔢 Stoner NFT balance:', balance.toString())
+      
+      // Sanity check for unrealistic balances
+      const numBalance = Number(balance)
+      const maxReasonableBalance = 1000
+      
+      if (numBalance > maxReasonableBalance) {
+        console.log(`⚠️ Balance seems unusually large (${numBalance}), limiting to ${maxReasonableBalance}`)
+        setWalletNFTs([])
+        setStakedNFTs([])
+        setStatus(`Warning: NFT balance appears corrupted (${numBalance}). Please check the contract.`)
+        return
+      }
+      
       const walletTokens = []
       
       // Try enumerable approach first
