@@ -158,49 +158,133 @@ export default function StonerFeePoolActions() {
       console.log(`✅ Loaded ${walletTokens.length}/${balance} wallet Stoner NFTs`)
       setWalletNFTs(walletTokens)
       
-      // Get staked NFTs from StakeReceipt contract
+      // Get staked NFTs - try multiple approaches for different StakeReceipt contract versions
       try {
         console.log('🔥 Fetching staked NFTs from StakeReceipt contract...')
         const stakeReceiptContract = new ethers.Contract(STONER_STAKE_RECEIPT_ADDRESS, StakeReceiptABI, provider)
+        let stakedTokens = []
         
-        // Get user's receipt tokens and corresponding original token IDs
-        const [receipts, originalTokenIds] = await stakeReceiptContract.getUserReceipts(addr)
-        console.log('🔥 Raw receipts and original tokens from StakeReceipt:', receipts, originalTokenIds)
-        
-        // Convert to arrays if needed
-        const receiptIds = Array.from(receipts).map(id => id.toString())
-        const stakedTokenIds = Array.from(originalTokenIds).map(id => id.toString())
-        
-        console.log('🔥 Staked Stoner NFT token IDs from receipts:', stakedTokenIds)
-        const stakedTokens = []
-        
-        for (let i = 0; i < stakedTokenIds.length; i++) {
-          const tokenId = stakedTokenIds[i]
-          const receiptId = receiptIds[i]
+        // Method 1: Try getUserReceipts() if it exists (enhanced contract)
+        try {
+          const [receipts, originalTokenIds] = await stakeReceiptContract.getUserReceipts(addr)
+          console.log('🔥 Raw receipts and original tokens from getUserReceipts:', receipts, originalTokenIds)
           
-          let image = null
-          try {
-            let uri = await nftContract.tokenURI(tokenId)
-            if (uri.startsWith('ipfs://')) {
-              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-            }
-            if (uri.startsWith('http')) {
-              const resp = await fetch(uri)
-              const meta = await resp.json()
-              image = meta.image || meta.image_url
-              if (image && image.startsWith('ipfs://')) {
-                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+          const receiptIds = Array.from(receipts).map(id => id.toString())
+          const stakedTokenIds = Array.from(originalTokenIds).map(id => id.toString())
+          
+          console.log('🔥 Staked Stoner NFT token IDs from receipts:', stakedTokenIds)
+          
+          for (let i = 0; i < stakedTokenIds.length; i++) {
+            const tokenId = stakedTokenIds[i]
+            const receiptId = receiptIds[i]
+            
+            let image = null
+            try {
+              let uri = await nftContract.tokenURI(tokenId)
+              if (uri.startsWith('ipfs://')) {
+                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
               }
+              if (uri.startsWith('http')) {
+                const resp = await fetch(uri)
+                const meta = await resp.json()
+                image = meta.image || meta.image_url
+                if (image && image.startsWith('ipfs://')) {
+                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+              }
+            } catch (e) {
+              console.warn('Failed to fetch metadata for staked token', tokenId)
             }
-          } catch (e) {
-            console.warn('Failed to fetch metadata for staked token', tokenId)
+            
+            stakedTokens.push({ 
+              tokenId: tokenId, 
+              receiptId: receiptId,
+              image 
+            })
           }
           
-          stakedTokens.push({ 
-            tokenId: tokenId, 
-            receiptId: receiptId, // Store receipt ID for unstaking
-            image 
-          })
+        } catch (getUserReceiptsError) {
+          console.log('🔥 getUserReceipts() not available, trying fallback method...')
+          
+          // Method 2: Fallback - check StakeReceipt balance and enumerate receipt tokens
+          try {
+            const receiptBalance = await stakeReceiptContract.balanceOf(addr)
+            console.log('🔥 StakeReceipt balance:', receiptBalance.toString())
+            
+            if (receiptBalance > 0) {
+              // Get all receipt token IDs owned by user
+              const receiptTokenIds = []
+              
+              // If contract supports tokenOfOwnerByIndex, use it
+              try {
+                for (let i = 0; i < Number(receiptBalance); i++) {
+                  const receiptId = await stakeReceiptContract.tokenOfOwnerByIndex(addr, i)
+                  receiptTokenIds.push(receiptId.toString())
+                }
+                console.log('🔥 Receipt token IDs:', receiptTokenIds)
+              } catch (e) {
+                console.log('🔥 tokenOfOwnerByIndex not available, using brute force for receipts...')
+                // Brute force method for receipt tokens (limited range)
+                for (let tokenId = 1; tokenId <= 1000; tokenId++) {
+                  try {
+                    const owner = await stakeReceiptContract.ownerOf(tokenId)
+                    if (owner.toLowerCase() === addr.toLowerCase()) {
+                      receiptTokenIds.push(tokenId.toString())
+                    }
+                  } catch (e) {
+                    // Token doesn't exist or not owned
+                  }
+                }
+              }
+              
+              // For each receipt token, try to get the original staked token ID
+              for (const receiptId of receiptTokenIds) {
+                let originalTokenId = null
+                
+                // Try different methods to get original token ID
+                try {
+                  // Method 1: receiptToOriginalToken mapping
+                  originalTokenId = await stakeReceiptContract.receiptToOriginalToken(receiptId)
+                } catch (e) {
+                  try {
+                    // Method 2: getOriginalTokenId function
+                    originalTokenId = await stakeReceiptContract.getOriginalTokenId(receiptId)
+                  } catch (e2) {
+                    // Method 3: Assume receipt ID = original token ID (simple contracts)
+                    originalTokenId = receiptId
+                  }
+                }
+                
+                if (originalTokenId) {
+                  let image = null
+                  try {
+                    let uri = await nftContract.tokenURI(originalTokenId)
+                    if (uri.startsWith('ipfs://')) {
+                      uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                    if (uri.startsWith('http')) {
+                      const resp = await fetch(uri)
+                      const meta = await resp.json()
+                      image = meta.image || meta.image_url
+                      if (image && image.startsWith('ipfs://')) {
+                        image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Failed to fetch metadata for staked token', originalTokenId.toString())
+                  }
+                  
+                  stakedTokens.push({ 
+                    tokenId: originalTokenId.toString(), 
+                    receiptId: receiptId,
+                    image 
+                  })
+                }
+              }
+            }
+          } catch (fallbackError) {
+            console.log('🔥 Fallback method also failed:', fallbackError)
+          }
         }
         
         console.log(`✅ Loaded ${stakedTokens.length} staked Stoner NFTs:`, stakedTokens.map(t => t.tokenId))

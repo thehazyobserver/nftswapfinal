@@ -148,12 +148,13 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           const balance = await nftContract.balanceOf(addr)
           console.log(`🎯 Collection NFT Balance for ${addr}:`, balance.toString())
           
-          // Validate balance - if it's impossibly large, the contract's balanceOf might be broken
+          // For ERC404 tokens, balanceOf might return 0 even when you own tokens
+          // So we always use fallback scanning for these types of collections
           const balanceNumber = Number(balance)
-          const isBalanceRealistic = balanceNumber > 0 && balanceNumber <= 10000
+          console.log(`🎯 Collection NFT Balance for ${addr}: ${balance.toString()}`)
           
-          if (balanceNumber > 10000) {
-            console.log(`⚠️ Balance seems unusually large (${balance.toString()}), will use fallback scanning only`)
+          if (balanceNumber === 0) {
+            console.log(`⚠️ ERC404 token detected (balance=0), skipping enumerable approach and using fallback scan`)
           }
           
           const tokens = []
@@ -166,8 +167,11 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
 
           let tokenIds = []
           
-          // Try enumerable approach first (only if balance is realistic)
-          if (isBalanceRealistic) {
+          // For ERC404 tokens or unrealistic balances, skip enumerable and go straight to fallback
+          const isBalanceRealistic = balanceNumber > 0 && balanceNumber <= 10000
+          
+          // Try enumerable approach first (only if balance is realistic and > 0)
+          if (isBalanceRealistic && balanceNumber > 0) {
             try {
               console.log(`🔍 Trying enumerable approach for ${balance.toString()} collection tokens...`)
               const tokenIdPromises = []
@@ -240,9 +244,11 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
               tokenIds = ownedTokens
               console.log(`✅ Collection NFT fallback scan complete, found ${tokenIds.length} tokens:`, tokenIds.map(id => id.toString()))
               
-              if (isBalanceRealistic && tokenIds.length !== balanceNumber) {
+              if (balanceNumber === 0 && tokenIds.length > 0) {
+                console.log(`✅ ERC404 token detection successful: balance=0 but found ${tokenIds.length} actual tokens`)
+              } else if (isBalanceRealistic && balanceNumber > 0 && tokenIds.length !== balanceNumber) {
                 console.warn(`⚠️ Collection NFT count mismatch: balance=${balance.toString()}, found=${tokenIds.length}`)
-              } else if (!isBalanceRealistic) {
+              } else if (balanceNumber > 10000) {
                 console.log(`✅ Found ${tokenIds.length} Collection NFTs (balance was unrealistic: ${balance.toString()})`)
               }
             } catch (fallbackError) {
