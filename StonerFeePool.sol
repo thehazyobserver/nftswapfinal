@@ -215,6 +215,9 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     mapping(address => bool) public whitelistedTokens;
     address[] public whitelistedTokensList;
     
+    // Track authorized reward senders (contracts that can auto-whitelist tokens)
+    mapping(address => bool) public authorizedRewardSenders;
+    
     // ERC20 rewards tracking: token => rewardPerTokenStored (scaled by PRECISION)
     mapping(address => uint256) public erc20RewardPerTokenStored;
     // ERC20 rewards tracking: token => rewardCarry (remainder from distribution)
@@ -239,6 +242,7 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     event TokenRemovedFromWhitelist(address indexed token);
     event ERC20RewardReceived(address indexed token, address indexed sender, uint256 amount);
     event ERC20RewardClaimed(address indexed user, address indexed token, uint256 amount);
+    event AuthorizedSenderUpdated(address indexed sender, bool authorized);
     
     // Emergency Withdrawal Events
     event EmergencyERC20Withdrawal(address indexed token, address indexed to, uint256 amount);
@@ -461,9 +465,19 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // ---------- ERC20 Rewards ----------
 
     function notifyERC20Reward(address token, uint256 amount) external {
-        if (!whitelistedTokens[token]) revert TokenNotWhitelisted();
         if (amount == 0) revert ZeroTokenAmount();
         if (totalStaked == 0) revert NoStakers();
+
+        // Auto-whitelist for authorized senders and owner
+        if (!whitelistedTokens[token]) {
+            if (authorizedRewardSenders[msg.sender] || msg.sender == owner()) {
+                whitelistedTokens[token] = true;
+                whitelistedTokensList.push(token);
+                emit TokenWhitelisted(token);
+            } else {
+                revert TokenNotWhitelisted();
+            }
+        }
 
         // Transfer tokens from sender to this contract
         IERC20(token).transferFrom(msg.sender, address(this), amount);
@@ -700,6 +714,12 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
+    function setAuthorizedRewardSender(address sender, bool authorized) external onlyOwner {
+        if (sender == address(0)) revert ZeroAddress();
+        authorizedRewardSenders[sender] = authorized;
+        emit AuthorizedSenderUpdated(sender, authorized);
+    }
+
     // ---------- Views ----------
 
     function getStakedTokens(address user) external view returns (uint256[] memory) {
@@ -722,6 +742,10 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
     function getWhitelistedTokens() external view returns (address[] memory) {
         return whitelistedTokensList;
+    }
+
+    function isAuthorizedRewardSender(address sender) external view returns (bool) {
+        return authorizedRewardSenders[sender] || sender == owner();
     }
 
     function getAllPendingERC20Rewards(address user) external view returns (address[] memory tokens, uint256[] memory rewardAmounts) {
