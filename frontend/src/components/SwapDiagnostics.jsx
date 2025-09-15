@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { ethers } from 'ethers'
 
-const SWAP_POOL_ADDRESS = '0x399a73dFa0a362441b7067413224E5765D168dD0'
+const SWAP_POOL_ADDRESS = '0x2ce24bc81E4Baf1e49Fb61Ec4ED1e58395EC3119'
 const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
 
 const SWAP_POOL_ABI = [
