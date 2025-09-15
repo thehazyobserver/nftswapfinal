@@ -204,13 +204,17 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         }
 
         // DEPLOYMENT INSTRUCTION:
-        // Deploy SwapPoolNonProxy and StakeReceipt contracts manually with these parameters:
+        // Deploy SwapPoolFixed and StakeReceipt contracts manually with these parameters:
         //
-        // 1. Deploy StakeReceipt:
+        // 1. Deploy StakeReceipt with UPDATED INTERFACE:
         //    constructor(string memory name, string memory symbol)
         //    Example: StakeReceipt("Collection A Receipt", "CAR")
+        //    
+        //    IMPORTANT: Receipt contract must implement:
+        //    - mint(address to, uint256 poolSlotId) instead of mint(address to, uint256 originalTokenId)
+        //    - getPoolSlotId(uint256 receiptTokenId) instead of getOriginalTokenId(uint256 receiptTokenId)
         //
-        // 2. Deploy SwapPoolNonProxy:
+        // 2. Deploy SwapPoolFixed:
         //    constructor(
         //        address _nftCollection,      // The NFT collection
         //        address _receiptContract,    // StakeReceipt from step 1
@@ -255,7 +259,7 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     /**
      * @dev Register manually deployed pool pair
      * @param nftCollection The NFT collection address
-     * @param swapPool The deployed SwapPoolNonProxy address
+     * @param swapPool The deployed SwapPoolFixed address
      * @param stakeReceipt The deployed StakeReceipt address
      */
     function registerPoolPair(
