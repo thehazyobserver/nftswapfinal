@@ -24,6 +24,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   const [walletLoading, setWalletLoading] = useState(false)
   const [receiptLoading, setReceiptLoading] = useState(false)
   const [poolLoading, setPoolLoading] = useState(false)
+  const [contractInfo, setContractInfo] = useState(null)
 
   // Helper to get signer
   const getSigner = async () => {
@@ -80,6 +81,28 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       
       setWalletLoading(true)
       setReceiptLoading(true)
+      
+      // Fetch contract info (pool size and staked count)
+      try {
+        const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
+        const info = await pool.getContractInfo()
+        setContractInfo({
+          nftCollection: info[0],
+          receiptContract: info[1], 
+          stonerPool: info[2],
+          swapFeeInWei: info[3],
+          stonerShare: info[4],
+          poolSize: Number(info[5]), // Available for swapping
+          stakedCount: Number(info[6]) // Staked for rewards
+        })
+        console.log('📊 Contract Info:', {
+          poolSize: Number(info[5]),
+          stakedCount: Number(info[6])
+        })
+      } catch (e) {
+        console.warn('Failed to fetch contract info:', e)
+        setContractInfo(null)
+      }
       
       let addr = null
       if (window.ethereum) {
@@ -746,9 +769,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   }
 
   return (
-    <div className="mt-6 p-4 sm:p-6 bg-secondary dark:bg-secondary rounded-2xl shadow-xl border border-accent/10">
+    <div className="mt-6 p-4 sm:p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700">
       <div className="flex justify-between items-center mb-4">
-        <h4 className="font-bold text-lg text-accent tracking-wide">Pool Actions</h4>
+        <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400 tracking-wide">Pool Actions</h4>
         <button 
           onClick={refreshNFTs}
           className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center gap-1.5"
@@ -760,6 +783,26 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           Refresh
         </button>
       </div>
+
+      {/* Contract Info Display */}
+      {contractInfo && (
+        <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-2xl mb-1">🏊</div>
+              <div className="font-semibold text-blue-600 dark:text-blue-400">Pool Size</div>
+              <div className="text-lg font-bold">{contractInfo.poolSize}</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">Available for swapping</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl mb-1">🔒</div>
+              <div className="font-semibold text-green-600 dark:text-green-400">Staked Count</div>
+              <div className="text-lg font-bold">{contractInfo.stakedCount}</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">Earning rewards</div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="space-y-6">
         <div>
           <div className="flex items-center justify-between mb-2">
