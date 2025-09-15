@@ -864,7 +864,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
                 <div className="text-2xl mb-2">🏊‍♂️</div>
                 <div className="text-muted dark:text-muted mb-1">No NFTs in pool</div>
                 <div className="text-sm text-muted dark:text-muted">
-                  The pool is empty. Stake some NFTs to add them to the pool!
+                  This collection pool is empty. Stake collection NFTs to add them to the pool for swapping!
                 </div>
               </div>
             ) : (

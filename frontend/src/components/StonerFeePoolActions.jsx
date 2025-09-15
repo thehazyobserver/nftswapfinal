@@ -137,6 +137,7 @@ export default function StonerFeePoolActions() {
       // Get staked NFTs
       try {
         const stakedTokenIdsRaw = await feePoolContract.getStakedTokens(addr)
+        console.log('🔥 Raw staked tokens from contract:', stakedTokenIdsRaw)
         // Convert proxy result to actual array 
         const stakedTokenIds = Array.from(stakedTokenIdsRaw).map(id => id.toString())
         console.log('🔥 Staked Stoner NFT token IDs:', stakedTokenIds)
