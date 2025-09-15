@@ -4,6 +4,15 @@ import { ethers } from 'ethers'
 const SWAP_POOL_ADDRESS = '0x2ce24bc81E4Baf1e49Fb61Ec4ED1e58395EC3119'
 const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
 
+// Common ERC20 ABI for checking balances and details
+const ERC20_ABI = [
+  'function balanceOf(address) view returns (uint256)',
+  'function symbol() view returns (string)',
+  'function decimals() view returns (uint8)',
+  'function name() view returns (string)',
+  'function totalSupply() view returns (uint256)'
+]
+
 const SWAP_POOL_ABI = [
   'function getPoolInfo() view returns (address nftCollection, address receiptContract, address stonerPool, uint256 swapFeeInWei, uint256 stonerShare, uint256 poolSize, uint256 totalStaked)',
   'function stonerShare() view returns (uint256)',
@@ -132,6 +141,71 @@ export default function SwapDiagnostics() {
     }
   }
 
+  const analyzeERC20Rewards = async () => {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const userAddress = await signer.getAddress()
+      
+      const stonerFeePool = new ethers.Contract(STONER_FEE_POOL_ADDRESS, STONER_FEE_POOL_ABI, provider)
+      
+      // Get whitelisted tokens
+      const whitelistedTokens = await stonerFeePool.getWhitelistedTokens()
+      console.log('🔍 Whitelisted tokens in StonerFeePool:', whitelistedTokens)
+      
+      // Check each whitelisted token
+      for (const tokenAddress of whitelistedTokens) {
+        try {
+          const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
+          const [symbol, name, decimals, totalSupply] = await Promise.all([
+            tokenContract.symbol(),
+            tokenContract.name(),
+            tokenContract.decimals(),
+            tokenContract.totalSupply()
+          ])
+          
+          // Check balances in different contracts
+          const [
+            swapPoolBalance,
+            stonerFeePoolBalance,
+            userBalance,
+            userPendingRewards
+          ] = await Promise.all([
+            tokenContract.balanceOf(SWAP_POOL_ADDRESS),
+            tokenContract.balanceOf(STONER_FEE_POOL_ADDRESS),
+            tokenContract.balanceOf(userAddress),
+            stonerFeePool.calculatePendingERC20Rewards(userAddress, tokenAddress)
+          ])
+          
+          console.log(`\n📊 ${symbol} (${name}) Analysis:`)
+          console.log(`  Contract: ${tokenAddress}`)
+          console.log(`  Decimals: ${decimals}`)
+          console.log(`  Total Supply: ${ethers.formatUnits(totalSupply, decimals)}`)
+          console.log(`  SwapPool Balance: ${ethers.formatUnits(swapPoolBalance, decimals)}`)
+          console.log(`  StonerFeePool Balance: ${ethers.formatUnits(stonerFeePoolBalance, decimals)}`)
+          console.log(`  Your Balance: ${ethers.formatUnits(userBalance, decimals)}`)
+          console.log(`  Your Pending Rewards: ${ethers.formatUnits(userPendingRewards, decimals)}`)
+          
+          // If this is a boat token with 1100 in contract
+          if (ethers.formatUnits(swapPoolBalance, decimals) === "1100.0" || 
+              ethers.formatUnits(stonerFeePoolBalance, decimals) === "1100.0") {
+            console.log(`🚤 Found boat token with 1100 balance!`)
+            alert(`🚤 Found ${symbol}: 1100 tokens found! Check console for details.`)
+          }
+          
+        } catch (e) {
+          console.error(`Failed to analyze token ${tokenAddress}:`, e)
+        }
+      }
+      
+      alert(`✅ ERC20 analysis complete. Found ${whitelistedTokens.length} whitelisted tokens. Check console for details.`)
+      
+    } catch (error) {
+      console.error('❌ ERC20 analysis failed:', error)
+      alert(`❌ ERC20 analysis failed: ${error.message}`)
+    }
+  }
+
   return (
     <div className="p-6 bg-red-100 dark:bg-red-900/20 rounded-xl border border-red-300 dark:border-red-700 space-y-4">
       <div className="flex items-center justify-between">
@@ -143,6 +217,12 @@ export default function SwapDiagnostics() {
             className="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50 hover:bg-red-700 transition-colors"
           >
             {loading ? 'Checking...' : 'Run Diagnostics'}
+          </button>
+          <button
+            onClick={analyzeERC20Rewards}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+          >
+            Analyze ERC20 Rewards
           </button>
           {results && typeof results === 'object' && results.stonerFeePool?.canReceiveRewards && (
             <button
