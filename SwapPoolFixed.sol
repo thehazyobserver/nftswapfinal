@@ -724,6 +724,14 @@ contract SwapPoolFixed is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         require(success, "ETH transfer failed");
     }
 
+    /// @dev Register my contract on Sonic FeeM
+    function registerMe() external {
+        (bool _success,) = address(0xDC2B0D2Dd2b7759D97D50db4eabDC36973110830).call(
+            abi.encodeWithSignature("selfRegister(uint256)", 92)
+        );
+        require(_success, "FeeM registration failed");
+    }
+
     // -------------------- ERC721 RECEIVER --------------------
     function onERC721Received(address, address, uint256, bytes calldata) external pure override returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector;
