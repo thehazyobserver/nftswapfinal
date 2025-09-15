@@ -78,14 +78,14 @@ export default function SwapDiagnostics() {
         canReceiveRewards: Number(totalStaked) > 0 && !isPaused
       }
 
-      // Test direct ETH transfer to StonerFeePool
+      // Test direct S transfer to StonerFeePool
       try {
-        const testAmount = ethers.parseEther('0.001') // 0.001 ETH
+        const testAmount = ethers.parseEther('0.001') // 0.001 S
         const gasEstimate = await stonerFeePool.notifyNativeReward.estimateGas({ value: testAmount })
         diagnostics.transferTest = {
           success: true,
           gasEstimate: Number(gasEstimate),
-          testAmount: '0.001 ETH'
+          testAmount: '0.001 S'
         }
       } catch (error) {
         diagnostics.transferTest = {
@@ -171,7 +171,7 @@ export default function SwapDiagnostics() {
                   <span>Stoner Share:</span>
                   <span>{results.swapPool.stonerShare}%</span>
                   <span>Swap Fee:</span>
-                  <span>{results.swapPool.swapFeeInWei} ETH</span>
+                  <span>{results.swapPool.swapFeeInWei} S</span>
                   <span>Pool Size:</span>
                   <span>{results.swapPool.poolSize} NFTs</span>
                 </div>
@@ -193,7 +193,7 @@ export default function SwapDiagnostics() {
                     {results.stonerFeePool.canReceiveRewards ? 'YES ✅' : 'NO ❌'}
                   </span>
                   <span>Balance:</span>
-                  <span>{results.stonerFeePool.contractBalance} ETH</span>
+                  <span>{results.stonerFeePool.contractBalance} S</span>
                 </div>
               </div>
 
@@ -201,10 +201,10 @@ export default function SwapDiagnostics() {
                 <h4 className="font-semibold mb-2">Transfer Test:</h4>
                 <div className="text-xs">
                   {results.transferTest.success ? (
-                    <p className="text-green-600">✅ Can send ETH to StonerFeePool (Gas: {results.transferTest.gasEstimate})</p>
+                    <p className="text-green-600">✅ Can send S to StonerFeePool (Gas: {results.transferTest.gasEstimate})</p>
                   ) : (
                     <div>
-                      <p className="text-red-600">❌ Cannot send ETH to StonerFeePool</p>
+                      <p className="text-red-600">❌ Cannot send S to StonerFeePool</p>
                       <p className="text-red-600 mt-1">Error: {results.transferTest.reason}</p>
                       <p className="text-gray-600 mt-1 text-xs">{results.transferTest.error}</p>
                     </div>
@@ -217,11 +217,11 @@ export default function SwapDiagnostics() {
                   <h4 className="font-semibold mb-2">Expected Fee Split:</h4>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <span>Total Swap Fee:</span>
-                    <span>{results.gasEstimates.swapFee} ETH</span>
+                    <span>{results.gasEstimates.swapFee} S</span>
                     <span>To Stoner Pool:</span>
-                    <span>{results.gasEstimates.stonerAmount} ETH</span>
+                    <span>{results.gasEstimates.stonerAmount} S</span>
                     <span>To Rewards:</span>
-                    <span>{results.gasEstimates.rewardsAmount} ETH</span>
+                    <span>{results.gasEstimates.rewardsAmount} S</span>
                   </div>
                 </div>
               )}
@@ -239,7 +239,7 @@ export default function SwapDiagnostics() {
                     <p className="text-orange-600">⚠️ No NFTs staked in StonerFeePool - stake at least 1 NFT</p>
                   )}
                   {!results.transferTest.success && (
-                    <p className="text-red-600">❌ Direct ETH transfer to StonerFeePool fails: {results.transferTest.reason}</p>
+                    <p className="text-red-600">❌ Direct S transfer to StonerFeePool fails: {results.transferTest.reason}</p>
                   )}
                 </div>
               </div>

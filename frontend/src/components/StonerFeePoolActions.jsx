@@ -210,10 +210,10 @@ export default function StonerFeePoolActions() {
       
       const feePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
       
-      // Get native ETH rewards
+      // Get native S rewards
       const nativeEarned = await feePoolContract.calculatePendingRewards(addr)
       setNativeRewards(ethers.formatEther(nativeEarned))
-      console.log('💎 Native ETH rewards:', ethers.formatEther(nativeEarned))
+      console.log('💎 Native S rewards:', ethers.formatEther(nativeEarned))
       
       // Get whitelisted tokens
       const whitelisted = await feePoolContract.getWhitelistedTokens()
@@ -475,23 +475,23 @@ export default function StonerFeePoolActions() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Native ETH Rewards */}
+          {/* Native S Rewards */}
           <div className="bg-black/20 rounded-lg p-4 border border-gray-600">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-blue-400 text-lg">⚡</span>
-                <span className="font-medium text-blue-400">ETH Rewards</span>
+                <span className="font-medium text-blue-400">S Rewards</span>
               </div>
               <button
                 onClick={handleClaimNative}
                 disabled={loading || parseFloat(nativeRewards) === 0}
                 className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors"
               >
-                Claim ETH
+                Claim S
               </button>
             </div>
             <div className="text-2xl font-bold text-white">
-              {parseFloat(nativeRewards).toFixed(6)} ETH
+              {parseFloat(nativeRewards).toFixed(6)} S
             </div>
           </div>
 
