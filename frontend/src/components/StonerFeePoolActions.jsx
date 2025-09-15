@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import StonerFeePoolABI from '../abis/StonerFeePool.json'
+import StakeReceiptABI from '../abis/StakeReceipt.json'
 import NFTTokenImage from './NFTTokenImage'
 import StonerNFTABI from '../abis/StonerNFT.json'
+import contractAddresses from '../../public/contracts.json'
 
-const STONER_FEE_POOL_ADDRESS = '0x5777fc6ca7f6BDc02dF3323A0C05970bB9D05b74'
+const STONER_FEE_POOL_ADDRESS = contractAddresses.stonerFeePool
+const STONER_STAKE_RECEIPT_ADDRESS = contractAddresses.stonerStakeReceipt
 const STONER_NFT_ADDRESS = '0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb'
 
 export default function StonerFeePoolActions() {
@@ -155,16 +158,26 @@ export default function StonerFeePoolActions() {
       console.log(`✅ Loaded ${walletTokens.length}/${balance} wallet Stoner NFTs`)
       setWalletNFTs(walletTokens)
       
-      // Get staked NFTs
+      // Get staked NFTs from StakeReceipt contract
       try {
-        const stakedTokenIdsRaw = await feePoolContract.getStakedTokens(addr)
-        console.log('🔥 Raw staked tokens from contract:', stakedTokenIdsRaw)
-        // Convert proxy result to actual array 
-        const stakedTokenIds = Array.from(stakedTokenIdsRaw).map(id => id.toString())
-        console.log('🔥 Staked Stoner NFT token IDs:', stakedTokenIds)
+        console.log('🔥 Fetching staked NFTs from StakeReceipt contract...')
+        const stakeReceiptContract = new ethers.Contract(STONER_STAKE_RECEIPT_ADDRESS, StakeReceiptABI, provider)
+        
+        // Get user's receipt tokens and corresponding original token IDs
+        const [receipts, originalTokenIds] = await stakeReceiptContract.getUserReceipts(addr)
+        console.log('🔥 Raw receipts and original tokens from StakeReceipt:', receipts, originalTokenIds)
+        
+        // Convert to arrays if needed
+        const receiptIds = Array.from(receipts).map(id => id.toString())
+        const stakedTokenIds = Array.from(originalTokenIds).map(id => id.toString())
+        
+        console.log('🔥 Staked Stoner NFT token IDs from receipts:', stakedTokenIds)
         const stakedTokens = []
         
-        for (const tokenId of stakedTokenIds) {
+        for (let i = 0; i < stakedTokenIds.length; i++) {
+          const tokenId = stakedTokenIds[i]
+          const receiptId = receiptIds[i]
+          
           let image = null
           try {
             let uri = await nftContract.tokenURI(tokenId)
@@ -180,10 +193,14 @@ export default function StonerFeePoolActions() {
               }
             }
           } catch (e) {
-            console.warn('Failed to fetch metadata for staked token', tokenId.toString())
+            console.warn('Failed to fetch metadata for staked token', tokenId)
           }
           
-          stakedTokens.push({ tokenId: tokenId.toString(), image })
+          stakedTokens.push({ 
+            tokenId: tokenId, 
+            receiptId: receiptId, // Store receipt ID for unstaking
+            image 
+          })
         }
         
         console.log(`✅ Loaded ${stakedTokens.length} staked Stoner NFTs:`, stakedTokens.map(t => t.tokenId))
@@ -318,11 +335,20 @@ export default function StonerFeePoolActions() {
       const signer = await getSigner()
       const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
       
+      // Convert selected token IDs to receipt IDs
+      // selectedStakedTokens contains original NFT token IDs, but we need receipt IDs
+      const receiptIds = selectedStakedTokens.map(tokenId => {
+        const stakedNFT = stakedNFTs.find(nft => nft.tokenId === tokenId)
+        return stakedNFT ? stakedNFT.receiptId : tokenId
+      })
+      
+      console.log('🔥 Unstaking with receipt IDs:', receiptIds)
+      
       let tx
-      if (selectedStakedTokens.length === 1) {
-        tx = await contract.unstake(selectedStakedTokens[0])
+      if (receiptIds.length === 1) {
+        tx = await contract.unstake(receiptIds[0])
       } else {
-        tx = await contract.unstakeMultiple(selectedStakedTokens)
+        tx = await contract.unstakeMultiple(receiptIds)
       }
       
       setStatus('Unstaking...')
@@ -333,6 +359,7 @@ export default function StonerFeePoolActions() {
       // Refresh NFT lists
       await fetchNFTs()
     } catch (e) {
+      console.error('Unstaking failed:', e)
       setStatus('Unstaking failed: ' + (e.reason || e.message))
     }
     
