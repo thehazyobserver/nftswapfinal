@@ -16,6 +16,12 @@ export default function StonerFeePoolActions() {
   const [selectedTokens, setSelectedTokens] = useState([])
   const [selectedStakedTokens, setSelectedStakedTokens] = useState([])
   const [isApprovedForAll, setIsApprovedForAll] = useState(false)
+  
+  // Rewards state
+  const [nativeRewards, setNativeRewards] = useState('0')
+  const [erc20Rewards, setErc20Rewards] = useState([])
+  const [whitelistedTokens, setWhitelistedTokens] = useState([])
+  const [rewardsLoading, setRewardsLoading] = useState(false)
 
   const getSigner = async () => {
     if (!window.ethereum) throw new Error('Wallet not found')
@@ -191,9 +197,76 @@ export default function StonerFeePoolActions() {
     }
   }
 
-  // Fetch NFTs on component mount
+  // Fetch rewards function
+  const fetchRewards = async () => {
+    console.log('💰 fetchRewards called in StonerFeePoolActions')
+    if (!window.ethereum) return
+    
+    try {
+      setRewardsLoading(true)
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const addr = await signer.getAddress()
+      
+      const feePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
+      
+      // Get native ETH rewards
+      const nativeEarned = await feePoolContract.calculatePendingRewards(addr)
+      setNativeRewards(ethers.formatEther(nativeEarned))
+      console.log('💎 Native ETH rewards:', ethers.formatEther(nativeEarned))
+      
+      // Get whitelisted tokens
+      const whitelisted = await feePoolContract.getWhitelistedTokens()
+      setWhitelistedTokens(whitelisted)
+      console.log('📋 Whitelisted tokens:', whitelisted)
+      
+      // Get ERC20 rewards for each whitelisted token
+      const erc20RewardPromises = whitelisted.map(async (tokenAddress) => {
+        try {
+          const earned = await feePoolContract.calculatePendingERC20Rewards(addr, tokenAddress)
+          
+          // Try to get token symbol and decimals
+          let symbol = 'Unknown'
+          let decimals = 18
+          try {
+            const tokenContract = new ethers.Contract(tokenAddress, [
+              'function symbol() view returns (string)',
+              'function decimals() view returns (uint8)'
+            ], provider)
+            symbol = await tokenContract.symbol()
+            decimals = await tokenContract.decimals()
+          } catch (e) {
+            console.warn(`Failed to get token info for ${tokenAddress}:`, e.message)
+          }
+          
+          return {
+            address: tokenAddress,
+            symbol,
+            decimals,
+            earned: ethers.formatUnits(earned, decimals),
+            rawEarned: earned.toString()
+          }
+        } catch (e) {
+          console.warn(`Failed to get rewards for token ${tokenAddress}:`, e.message)
+          return null
+        }
+      })
+      
+      const erc20Results = (await Promise.all(erc20RewardPromises)).filter(result => result !== null)
+      setErc20Rewards(erc20Results)
+      console.log('🪙 ERC20 rewards:', erc20Results)
+      
+    } catch (e) {
+      console.error('Failed to fetch rewards:', e)
+    } finally {
+      setRewardsLoading(false)
+    }
+  }
+
+  // Fetch NFTs and rewards on component mount
   useEffect(() => {
     fetchNFTs()
+    fetchRewards()
   }, [])
 
   // Handle stake
@@ -278,8 +351,55 @@ export default function StonerFeePoolActions() {
       setStatus('Claiming rewards...')
       await tx.wait()
       setStatus('Rewards claimed successfully!')
+      
+      // Refresh rewards after claiming
+      await fetchRewards()
     } catch (e) {
       setStatus('Claim failed: ' + (e.reason || e.message))
+    }
+    
+    setLoading(false)
+  }
+
+  // Handle claim native rewards only
+  const handleClaimNative = async () => {
+    setLoading(true)
+    setStatus('')
+    
+    try {
+      const signer = await getSigner()
+      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
+      const tx = await contract.claimRewardsOnly()
+      setStatus('Claiming native rewards...')
+      await tx.wait()
+      setStatus('Native rewards claimed successfully!')
+      
+      // Refresh rewards after claiming
+      await fetchRewards()
+    } catch (e) {
+      setStatus('Native claim failed: ' + (e.reason || e.message))
+    }
+    
+    setLoading(false)
+  }
+
+  // Handle claim specific ERC20 token rewards
+  const handleClaimERC20 = async (tokenAddress) => {
+    setLoading(true)
+    setStatus('')
+    
+    try {
+      const signer = await getSigner()
+      const contract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, signer)
+      const tx = await contract.claimERC20Rewards(tokenAddress)
+      setStatus('Claiming ERC20 rewards...')
+      await tx.wait()
+      setStatus('ERC20 rewards claimed successfully!')
+      
+      // Refresh rewards after claiming
+      await fetchRewards()
+    } catch (e) {
+      setStatus('ERC20 claim failed: ' + (e.reason || e.message))
     }
     
     setLoading(false)
@@ -335,6 +455,108 @@ export default function StonerFeePoolActions() {
           {status}
         </div>
       )}
+
+      {/* Rewards Section */}
+      <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 rounded-xl border border-yellow-500/20 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-lg flex items-center justify-center">
+              <span className="text-white text-lg">💰</span>
+            </div>
+            <h4 className="font-semibold text-yellow-400">Claimable Rewards</h4>
+          </div>
+          <button
+            onClick={fetchRewards}
+            disabled={rewardsLoading}
+            className="px-3 py-1 bg-yellow-600 text-white rounded text-sm disabled:opacity-50 hover:bg-yellow-700 transition-colors"
+          >
+            {rewardsLoading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Native ETH Rewards */}
+          <div className="bg-black/20 rounded-lg p-4 border border-gray-600">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-400 text-lg">⚡</span>
+                <span className="font-medium text-blue-400">ETH Rewards</span>
+              </div>
+              <button
+                onClick={handleClaimNative}
+                disabled={loading || parseFloat(nativeRewards) === 0}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors"
+              >
+                Claim ETH
+              </button>
+            </div>
+            <div className="text-2xl font-bold text-white">
+              {parseFloat(nativeRewards).toFixed(6)} ETH
+            </div>
+          </div>
+
+          {/* ERC20 Token Rewards */}
+          {erc20Rewards.length > 0 ? (
+            <div className="bg-black/20 rounded-lg p-4 border border-gray-600">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400 text-lg">🪙</span>
+                  <span className="font-medium text-green-400">Token Rewards</span>
+                </div>
+                <button
+                  onClick={handleClaim}
+                  disabled={loading || erc20Rewards.every(reward => parseFloat(reward.earned) === 0)}
+                  className="px-3 py-1 bg-green-600 text-white rounded text-sm disabled:opacity-50 hover:bg-green-700 transition-colors"
+                >
+                  Claim All
+                </button>
+              </div>
+              <div className="space-y-2 max-h-24 overflow-y-auto">
+                {erc20Rewards.map((reward, index) => (
+                  <div key={reward.address} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">{reward.symbol}:</span>
+                      <span className="text-white font-medium">
+                        {parseFloat(reward.earned).toFixed(4)}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleClaimERC20(reward.address)}
+                      disabled={loading || parseFloat(reward.earned) === 0}
+                      className="px-2 py-1 bg-green-600/80 text-white rounded text-xs disabled:opacity-50 hover:bg-green-600 transition-colors"
+                    >
+                      Claim
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-black/20 rounded-lg p-4 border border-gray-600">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-gray-400 text-lg">🪙</span>
+                <span className="font-medium text-gray-400">Token Rewards</span>
+              </div>
+              <div className="text-sm text-gray-500">
+                No whitelisted tokens or rewards available
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Summary */}
+        {(parseFloat(nativeRewards) > 0 || erc20Rewards.some(reward => parseFloat(reward.earned) > 0)) && (
+          <div className="text-center">
+            <button
+              onClick={handleClaim}
+              disabled={loading}
+              className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-lg disabled:opacity-50 hover:from-yellow-600 hover:to-orange-700 transition-all font-semibold"
+            >
+              {loading ? 'Claiming...' : 'Claim All Rewards'}
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Stake Section */}
