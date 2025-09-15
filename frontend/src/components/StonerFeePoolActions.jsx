@@ -8,6 +8,7 @@ const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
 const STONER_NFT_ADDRESS = '0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb'
 
 export default function StonerFeePoolActions() {
+  console.log('🎯 StonerFeePoolActions component loaded!')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
@@ -24,6 +25,7 @@ export default function StonerFeePoolActions() {
 
   // Fetch NFTs function (separate for refresh capability)
   const fetchNFTs = async () => {
+    console.log('🎯 fetchNFTs called in StonerFeePoolActions')
     if (!window.ethereum) return
     
     try {
