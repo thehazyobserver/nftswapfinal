@@ -4,7 +4,7 @@ import StonerFeePoolABI from '../abis/StonerFeePool.json'
 import NFTTokenImage from './NFTTokenImage'
 import StonerNFTABI from '../abis/StonerNFT.json'
 
-const STONER_FEE_POOL_ADDRESS = '0xF589111A4Af712142E68ce917751a4BFB8966dEe'
+const STONER_FEE_POOL_ADDRESS = '0x5777fc6ca7f6BDc02dF3323A0C05970bB9D05b74'
 const STONER_NFT_ADDRESS = '0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb'
 
 export default function StonerFeePoolActions() {

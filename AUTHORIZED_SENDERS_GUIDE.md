@@ -37,7 +37,7 @@ stonerFeePool.setAuthorizedRewardSender(daoTreasuryAddress, true);
 ### 2. External Contracts Send Rewards
 ```solidity
 contract YourGameContract {
-    address constant STONER_FEE_POOL = 0xF589111A4Af712142E68ce917751a4BFB8966dEe;
+    address constant STONER_FEE_POOL = 0x5777fc6ca7f6BDc02dF3323A0C05970bB9D05b74;
     
     function distributeRewards(address token, uint256 amount) external {
         // Get tokens

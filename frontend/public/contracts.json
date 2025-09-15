@@ -1,8 +1,8 @@
 {
-  "factoryAddress": "0x89aDefFa86a8648287620C2a1A77A6d55bb51E7c",
-  "dashboardAddress": "0x89aDefFa86a8648287620C2a1A77A6d55bb51E7c",
-  "stonerStakeReceipt": "0xe93755cC3b462E193023cf66c0aE3d3FB2E5b8f4",
-  "stonerFeePool": "0xF589111A4Af712142E68ce917751a4BFB8966dEe",
-  "boatStakeReceipt": "0x49e8410089d7a0C28543b4f6be2A818097f98029",
-  "boatSwapPool": "0x2ce24bc81E4Baf1e49Fb61Ec4ED1e58395EC3119"
+  "factoryAddress": "0x1Db92C2F11b7716f3fa6E94969a8649a32adB1De",
+  "dashboardAddress": "0x1Db92C2F11b7716f3fa6E94969a8649a32adB1De",
+  "stonerStakeReceipt": "0xB6748d708B5Cda0eA8c53e7072566971FCCb6b49",
+  "stonerFeePool": "0x5777fc6ca7f6BDc02dF3323A0C05970bB9D05b74",
+  "boatStakeReceipt": "0x58dAD55eff6da09800ba574973e6bC05E34f8419",
+  "boatSwapPool": "0x2fFEF12c9B67495bc0758c2c46600F0076E6cC48"
 }

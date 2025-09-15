@@ -3,7 +3,7 @@ import React from 'react'
 
 // You can expand this mapping or fetch from a remote API
 const collectionImages = {
-  '0xe93755cC3b462E193023cf66c0aE3d3FB2E5b8f4': 'https://nftstorage.link/stoner.png', // Stoner
+  '0xB6748d708B5Cda0eA8c53e7072566971FCCb6b49': 'https://nftstorage.link/stoner.png', // Stoner
   '0xE3941DB58B9D35410A66636da07c9B28b878B89E': 'https://nftstorage.link/boat.png', // Boat
   // Add more as needed
 }
