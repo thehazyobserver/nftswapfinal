@@ -291,7 +291,7 @@ export default function StonerFeePoolActions() {
   }
 
   return (
-    <div className="p-6 bg-card/60 rounded-2xl shadow-xl border border-accent/10 backdrop-blur-sm space-y-6">
+    <div className="p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-sm space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">

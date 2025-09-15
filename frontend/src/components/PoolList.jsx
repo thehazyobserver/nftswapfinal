@@ -319,7 +319,7 @@ export default function PoolList() {
             ))}
           </div>
         ) : pools.length === 0 ? (
-          <div className="p-8 bg-card/30 rounded-2xl text-center">
+          <div className="p-8 bg-white/90 dark:bg-gray-800/90 rounded-2xl text-center border border-gray-200 dark:border-gray-700">
             <div className="text-6xl mb-4">🏊‍♂️</div>
             <h3 className="text-xl font-semibold mb-2">No Swap Pools Found</h3>
             <p className="text-muted mb-4">
@@ -339,13 +339,13 @@ export default function PoolList() {
             {pools.map((p, i) => (
               <div
                 key={`${p.swapPool}-${i}`}
-                className="group p-4 sm:p-5 bg-card rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-transparent hover:border-accent/20 cursor-pointer"
+                className="group p-4 sm:p-5 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-200 dark:border-gray-700 hover:border-blue-400/50 cursor-pointer"
                 onClick={() => setSelectedPool(p)}
               >
                 <div className="flex items-start gap-4 mb-4">
                   <NFTCollectionImage address={p.nftCollection} size={56} />
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-lg text-accent mb-1 truncate">
+                    <h3 className="font-semibold text-lg text-blue-600 dark:text-blue-400 mb-1 truncate">
                       {poolNames[p.nftCollection] || 'Loading...'}
                     </h3>
                     <p className="text-xs text-muted font-mono truncate">
@@ -371,7 +371,7 @@ export default function PoolList() {
 
                 <div className="flex flex-wrap gap-2">
                   <button 
-                    className="flex-1 px-3 py-2 bg-gradient-to-r from-accent to-indigo-600 text-white rounded-lg hover:from-accent/80 hover:to-indigo-500 transition-colors text-sm font-medium"
+                    className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
                     onClick={(e) => {
                       e.stopPropagation()
                       setSelectedPool(p)
