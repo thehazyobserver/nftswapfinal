@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "ethereum-multicall": "^2.26.0"
+    "ethereum-multicall": "^2.26.0",
+    "react-router-dom": "^7.9.1"
   }
 }
