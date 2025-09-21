@@ -111,48 +111,62 @@ export default function StonerFeePoolActions() {
         foundViaEnumerable = false
       }
       
-      // If enumerable didn't work or found fewer tokens than expected, try brute force
+      // If enumerable didn't work or found fewer tokens than expected, try multicall brute force
       if (!foundViaEnumerable || walletTokens.length < Number(balance)) {
-        console.log('🔍 Trying brute force token discovery...')
-        const maxTokenId = 10000 // Reasonable upper bound for most NFT collections
-        let foundCount = 0
-        
-        for (let tokenId = 0; tokenId <= maxTokenId && foundCount < Number(balance); tokenId++) {
+        console.log('🔍 Trying multicall brute force token discovery...')
+        // Multicall setup
+        // You must install ethereum-multicall: npm install ethereum-multicall
+        // Import at top: import { Multicall } from "ethereum-multicall";
+        const { Multicall } = await import('ethereum-multicall');
+        const multicall = new Multicall({ ethersProvider: provider, tryAggregate: true });
+        const maxTokenId = 1000; // Lower for demo, increase as needed
+        const calls = [];
+        for (let tokenId = 0; tokenId <= maxTokenId; tokenId++) {
+          calls.push({
+            reference: `ownerOf_${tokenId}`,
+            contractAddress: STONER_NFT_ADDRESS,
+            abi: StonerNFTABI,
+            calls: [{ methodName: 'ownerOf', methodParameters: [tokenId] }]
+          });
+        }
+        const results = await multicall.call(calls);
+        // Parse results
+        // Collect owned token IDs
+        const ownedTokenIds = Object.entries(results.results)
+          .filter(([ref, result]) => {
+            return result.callsReturnContext && result.callsReturnContext[0].returnValues && result.callsReturnContext[0].returnValues[0] &&
+              result.callsReturnContext[0].returnValues[0].toLowerCase() === addr.toLowerCase();
+          })
+          .map(([ref]) => parseInt(ref.replace('ownerOf_', '')));
+
+        // Fetch metadata in parallel
+        const metadataPromises = ownedTokenIds.map(async (tokenId) => {
+          // Check if already added
+          const alreadyAdded = walletTokens.some(t => t.tokenId === tokenId.toString());
+          if (alreadyAdded) return null;
+          let image = null;
           try {
-            const owner = await nftContract.ownerOf(tokenId)
-            if (owner.toLowerCase() === addr.toLowerCase()) {
-              console.log(`📝 Found wallet token via brute force: #${tokenId}`)
-              foundCount++
-              
-              // Check if we already have this token
-              const alreadyAdded = walletTokens.some(t => t.tokenId === tokenId.toString())
-              if (!alreadyAdded) {
-                let image = null
-                try {
-                  let uri = await nftContract.tokenURI(tokenId)
-                  if (uri.startsWith('ipfs://')) {
-                    uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                  if (uri.startsWith('http')) {
-                    const resp = await fetch(uri)
-                    const meta = await resp.json()
-                    image = meta.image || meta.image_url
-                    if (image && image.startsWith('ipfs://')) {
-                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                    }
-                  }
-                } catch (e) {
-                  console.warn('Failed to fetch metadata for token', tokenId.toString())
-                }
-                
-                walletTokens.push({ tokenId: tokenId.toString(), image })
+            let uri = await nftContract.tokenURI(tokenId);
+            if (uri.startsWith('ipfs://')) {
+              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/');
+            }
+            if (uri.startsWith('http')) {
+              const resp = await fetch(uri);
+              const meta = await resp.json();
+              image = meta.image || meta.image_url;
+              if (image && image.startsWith('ipfs://')) {
+                image = image.replace('ipfs://', 'https://ipfs.io/ipfs/');
               }
             }
           } catch (e) {
-            // Token doesn't exist or not owned, continue
-            continue
+            console.warn('Failed to fetch metadata for token', tokenId.toString());
           }
-        }
+          return { tokenId: tokenId.toString(), image };
+        });
+        const metadataResults = await Promise.all(metadataPromises);
+        metadataResults.forEach(result => {
+          if (result) walletTokens.push(result);
+        });
       }
       
       console.log(`✅ Loaded ${walletTokens.length}/${balance} wallet Stoner NFTs`)
