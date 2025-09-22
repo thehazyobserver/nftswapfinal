@@ -1,6 +1,6 @@
 [build]
   base = "frontend"
-  command = "npm ci && npm run build"
+  command = "npm ci --legacy-peer-deps && npm run build"
   publish = "dist"
 
 # Optional: provide a redirect for SPA (Netlify will still use _redirects in dist)
