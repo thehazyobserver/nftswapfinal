@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { Routes, Route, Link } from 'react-router-dom';
 import PoolList from './components/PoolList';
 import SwapDiagnostics from './components/SwapDiagnostics';
 import StonerStaking from './pages/StonerStaking';
@@ -21,9 +21,8 @@ export default function App() {
   }, [isDark])
   
   return (
-    <Router>
-      <div className="min-h-screen p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:bg-gradient-to-br dark:from-zinc-900 dark:via-gray-900 dark:to-slate-900 text-gray-900 dark:text-gray-100">
-        <div className="max-w-6xl mx-auto p-2 sm:p-4 md:p-6 w-full">
+    <div className="min-h-screen p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:bg-gradient-to-br dark:from-zinc-900 dark:via-gray-900 dark:to-slate-900 text-gray-900 dark:text-gray-100">
+      <div className="max-w-6xl mx-auto p-2 sm:p-4 md:p-6 w-full">
           <header className="flex flex-col sm:flex-row items-center justify-between mb-6 py-4 px-2 sm:px-4 rounded-lg shadow-lg bg-white/90 dark:bg-gray-800/90 backdrop-blur-md gap-4 border border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full shadow flex items-center justify-center">
@@ -58,6 +57,5 @@ export default function App() {
           </main>
         </div>
       </div>
-    </Router>
   );
 }
