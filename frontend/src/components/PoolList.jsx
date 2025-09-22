@@ -3,7 +3,6 @@ import { ethers } from 'ethers'
 import FactoryABI from '../abis/MultiPoolFactoryNonProxy.json'
 import PoolDetail from './PoolDetail'
 import NFTCollectionImage from './NFTCollectionImage'
-import StonerFeePoolActions from './StonerFeePoolActions'
 
 // Helper to fetch ERC721 name
 async function fetchCollectionName(address, provider) {
@@ -263,9 +262,6 @@ export default function PoolList() {
           <p className="text-sm">{providerError}</p>
         </div>
       )}
-
-      {/* Stoner Fee Pool Section */}
-      <StonerFeePoolActions />
 
       {/* Swap Pools Section */}
       <div className="space-y-4">
