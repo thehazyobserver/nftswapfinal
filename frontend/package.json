@@ -9,9 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "ethers": "^6.8.4",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+  "ethers": "^6.8.4",
+  "react": "18.3.1",
+  "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.10",
