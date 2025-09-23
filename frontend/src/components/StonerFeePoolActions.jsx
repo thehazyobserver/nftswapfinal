@@ -168,111 +168,58 @@ export default function StonerFeePoolActions() {
         console.log('❌ tokenOfOwnerByIndex not supported (ERC404 contract), trying event-based approach')
         foundViaEnumerable = false
         
-        // For ERC404 contracts like StonerNFT, try to get Transfer events
+        // For ERC404 contracts like StonerNFT, use direct ownership checking
         try {
-          console.log('🔍 Trying event-based token discovery...')
+          console.log('🔍 Using direct ownership verification for ERC404 contract...')
           
-          // Get current block number to limit the search range
-          const currentBlock = await provider.getBlockNumber()
-          const blocksToSearch = Math.min(50000, currentBlock) // Limit to last 50k blocks or from start
-          const fromBlock = Math.max(0, currentBlock - blocksToSearch)
-          
-          console.log(`📅 Searching events from block ${fromBlock} to ${currentBlock}`)
-          
-          // Query Transfer events in smaller chunks to avoid timeout
-          const chunkSize = 10000
           const receivedTokens = new Set()
           
-          for (let startBlock = fromBlock; startBlock <= currentBlock; startBlock += chunkSize) {
-            const endBlock = Math.min(startBlock + chunkSize - 1, currentBlock)
+          // Optimized: Check larger ranges more efficiently
+          const maxTokenId = Math.max(10000, Number(balance) * 50) // Estimate max token ID
+          const batchSize = 20 // Check multiple tokens in parallel
+          let foundCount = 0
+          
+          // Check tokens in batches
+          for (let start = 1; start <= maxTokenId && foundCount < Number(balance); start += batchSize) {
+            const end = Math.min(start + batchSize - 1, maxTokenId)
+            
+            // Create batch of ownership check promises
+            const ownershipPromises = []
+            for (let tokenId = start; tokenId <= end; tokenId++) {
+              ownershipPromises.push(
+                nftContract.ownerOf(tokenId)
+                  .then(owner => ({ tokenId, owner: owner.toLowerCase() }))
+                  .catch(() => ({ tokenId, owner: null })) // Token doesn't exist
+              )
+            }
             
             try {
-              console.log(`🔍 Searching blocks ${startBlock} to ${endBlock}`)
+              // Execute batch in parallel
+              const results = await Promise.all(ownershipPromises)
               
-              // Get tokens received by user
-              const transferFilter = nftContract.filters.Transfer(null, addr)
-              const receivedEvents = await nftContract.queryFilter(transferFilter, startBlock, endBlock)
-              
-              receivedEvents.forEach(event => {
-                if (event.args && event.args.id) {
-                  receivedTokens.add(event.args.id.toString())
+              // Process results
+              for (const { tokenId, owner } of results) {
+                if (owner === addr.toLowerCase()) {
+                  receivedTokens.add(tokenId.toString())
+                  foundCount++
+                  console.log(`✅ Found owned token via direct check: #${tokenId} (${foundCount}/${balance})`)
+                  
+                  // Stop early if we found enough
+                  if (foundCount >= Number(balance)) break
                 }
-              })
-              
-              // Get tokens sent by user (to remove from owned list)
-              const outgoingFilter = nftContract.filters.Transfer(addr, null)
-              const sentEvents = await nftContract.queryFilter(outgoingFilter, startBlock, endBlock)
-              
-              sentEvents.forEach(event => {
-                if (event.args && event.args.id) {
-                  receivedTokens.delete(event.args.id.toString())
-                }
-              })
-              
-              // Small delay to avoid rate limiting
-              if (endBlock < currentBlock) {
-                await new Promise(resolve => setTimeout(resolve, 100))
               }
-            } catch (chunkError) {
-              console.warn(`Failed to search blocks ${startBlock}-${endBlock}:`, chunkError.message)
-              // Continue with next chunk
-              continue
-            }
-          }
-          
-          console.log(`📝 Found ${receivedTokens.size} tokens via events (expected ${balance})`)
-          
-          // If we found fewer tokens than expected, try a direct ownership check approach
-          if (receivedTokens.size < Number(balance) && Number(balance) <= 100) {
-            console.log('🔍 Trying direct ownership verification approach...')
-            
-            // Optimized: Check larger ranges more efficiently
-            const maxTokenId = Math.max(10000, Number(balance) * 50) // Estimate max token ID
-            const batchSize = 20 // Check multiple tokens in parallel
-            let foundCount = receivedTokens.size
-            
-            // Check tokens in batches
-            for (let start = 1; start <= maxTokenId && foundCount < Number(balance); start += batchSize) {
-              const end = Math.min(start + batchSize - 1, maxTokenId)
-              
-              // Create batch of ownership check promises
-              const ownershipPromises = []
-              for (let tokenId = start; tokenId <= end; tokenId++) {
-                ownershipPromises.push(
-                  nftContract.ownerOf(tokenId)
-                    .then(owner => ({ tokenId, owner: owner.toLowerCase() }))
-                    .catch(() => ({ tokenId, owner: null })) // Token doesn't exist
-                )
-              }
-              
-              try {
-                // Execute batch in parallel
-                const results = await Promise.all(ownershipPromises)
-                
-                // Process results
-                for (const { tokenId, owner } of results) {
-                  if (owner === addr.toLowerCase()) {
-                    receivedTokens.add(tokenId.toString())
-                    foundCount++
-                    console.log(`✅ Found owned token via direct check: #${tokenId} (${foundCount}/${balance})`)
-                    
-                    // Stop early if we found enough
-                    if (foundCount >= Number(balance)) break
-                  }
-                }
-              } catch (e) {
-                console.warn(`Batch ${start}-${end} failed:`, e.message)
-              }
-              
-              // Quick break if we found enough
-              if (foundCount >= Number(balance)) break
-              
-              // Small delay between batches (reduced from 50ms to 10ms)
-              await new Promise(resolve => setTimeout(resolve, 10))
+            } catch (e) {
+              console.warn(`Batch ${start}-${end} failed:`, e.message)
             }
             
-            console.log(`🎯 Direct check found ${foundCount} total tokens`)
+            // Quick break if we found enough
+            if (foundCount >= Number(balance)) break
+            
+            // Small delay between batches
+            await new Promise(resolve => setTimeout(resolve, 10))
           }
+          
+          console.log(`🎯 Direct check found ${foundCount} total tokens`)
           
           // Validate ownership and fetch metadata in parallel
           const tokenIds = Array.from(receivedTokens).slice(0, 50) // Limit to 50 for performance
@@ -340,10 +287,10 @@ export default function StonerFeePoolActions() {
           
           if (validTokenCount > 0) {
             foundViaEnumerable = true // Mark as found via alternative method
-            console.log(`🎉 Successfully loaded ${validTokenCount} Stoner NFTs via event-based discovery`)
+            console.log(`🎉 Successfully loaded ${validTokenCount} Stoner NFTs via direct ownership check`)
           }
-        } catch (eventError) {
-          console.warn('Event-based discovery failed:', eventError.message)
+        } catch (directError) {
+          console.warn('Direct ownership check failed:', directError.message)
         }
       }
       
