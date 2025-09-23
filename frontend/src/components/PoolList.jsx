@@ -339,7 +339,11 @@ export default function PoolList() {
                 onClick={() => setSelectedPool(p)}
               >
                 <div className="flex items-start gap-4 mb-4">
-                  <NFTCollectionImage address={p.nftCollection} size={56} />
+                  <NFTCollectionImage 
+                    address={p.nftCollection} 
+                    collectionName={poolNames[p.nftCollection]} 
+                    size={56} 
+                  />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-lg text-blue-600 dark:text-blue-400 mb-1 truncate">
                       {poolNames[p.nftCollection] || 'Loading...'}
@@ -396,6 +400,7 @@ export default function PoolList() {
       {selectedPool && (
         <PoolDetail 
           pool={selectedPool} 
+          collectionName={poolNames[selectedPool.nftCollection]}
           onClose={() => setSelectedPool(null)} 
           provider={provider} 
         />
