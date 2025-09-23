@@ -226,46 +226,73 @@ export default function StonerFeePoolActions() {
           if (receivedTokens.size < Number(balance) && Number(balance) <= 100) {
             console.log('🔍 Trying direct ownership verification approach...')
             
-            // Try checking ownership of token IDs in common ranges
-            const commonRanges = [
-              { start: 1, end: Math.min(1000, Number(balance) + 100) },
-              { start: 1001, end: Math.min(2000, Number(balance) + 1100) },
-              { start: 10001, end: Math.min(11000, Number(balance) + 10100) }
-            ]
+            // Optimized: Check larger ranges more efficiently
+            const maxTokenId = Math.max(10000, Number(balance) * 50) // Estimate max token ID
+            const batchSize = 20 // Check multiple tokens in parallel
+            let foundCount = receivedTokens.size
             
-            for (const range of commonRanges) {
-              for (let tokenId = range.start; tokenId <= range.end && walletTokens.length < Number(balance); tokenId++) {
-                try {
-                  const owner = await nftContract.ownerOf(tokenId)
-                  if (owner.toLowerCase() === addr.toLowerCase()) {
-                    receivedTokens.add(tokenId.toString())
-                    console.log(`✅ Found owned token via direct check: #${tokenId}`)
-                  }
-                } catch (e) {
-                  // Token doesn't exist or other error, continue
-                  continue
-                }
-                
-                // Small delay to avoid rate limiting
-                if (tokenId % 50 === 0) {
-                  await new Promise(resolve => setTimeout(resolve, 50))
-                }
+            // Check tokens in batches
+            for (let start = 1; start <= maxTokenId && foundCount < Number(balance); start += batchSize) {
+              const end = Math.min(start + batchSize - 1, maxTokenId)
+              
+              // Create batch of ownership check promises
+              const ownershipPromises = []
+              for (let tokenId = start; tokenId <= end; tokenId++) {
+                ownershipPromises.push(
+                  nftContract.ownerOf(tokenId)
+                    .then(owner => ({ tokenId, owner: owner.toLowerCase() }))
+                    .catch(() => ({ tokenId, owner: null })) // Token doesn't exist
+                )
               }
               
-              // If we found enough tokens, break
-              if (receivedTokens.size >= Number(balance)) break
+              try {
+                // Execute batch in parallel
+                const results = await Promise.all(ownershipPromises)
+                
+                // Process results
+                for (const { tokenId, owner } of results) {
+                  if (owner === addr.toLowerCase()) {
+                    receivedTokens.add(tokenId.toString())
+                    foundCount++
+                    console.log(`✅ Found owned token via direct check: #${tokenId} (${foundCount}/${balance})`)
+                    
+                    // Stop early if we found enough
+                    if (foundCount >= Number(balance)) break
+                  }
+                }
+              } catch (e) {
+                console.warn(`Batch ${start}-${end} failed:`, e.message)
+              }
+              
+              // Quick break if we found enough
+              if (foundCount >= Number(balance)) break
+              
+              // Small delay between batches (reduced from 50ms to 10ms)
+              await new Promise(resolve => setTimeout(resolve, 10))
             }
+            
+            console.log(`🎯 Direct check found ${foundCount} total tokens`)
           }
           
-          // Validate ownership and fetch metadata
+          // Validate ownership and fetch metadata in parallel
           const tokenIds = Array.from(receivedTokens).slice(0, 50) // Limit to 50 for performance
+          console.log(`📋 Validating ${tokenIds.length} tokens and fetching metadata...`)
+          
+          // Process tokens in smaller parallel batches for metadata
+          const metadataBatchSize = 5
           let validTokenCount = 0
           
-          for (const tokenId of tokenIds) {
-            try {
-              // Verify current ownership
-              const owner = await nftContract.ownerOf(tokenId)
-              if (owner.toLowerCase() === addr.toLowerCase()) {
+          for (let i = 0; i < tokenIds.length; i += metadataBatchSize) {
+            const batch = tokenIds.slice(i, i + metadataBatchSize)
+            
+            const metadataPromises = batch.map(async (tokenId) => {
+              try {
+                // Quick ownership re-validation
+                const owner = await nftContract.ownerOf(tokenId)
+                if (owner.toLowerCase() !== addr.toLowerCase()) {
+                  return null
+                }
+                
                 let image = null
                 try {
                   let uri = await nftContract.tokenURI(tokenId)
@@ -283,16 +310,32 @@ export default function StonerFeePoolActions() {
                 } catch (e) {
                   console.warn('Failed to fetch metadata for token', tokenId)
                 }
-                walletTokens.push({ tokenId: tokenId.toString(), image })
-                validTokenCount++
-                console.log(`✅ Validated token #${tokenId} (${validTokenCount}/${balance})`)
+                
+                return { tokenId: tokenId.toString(), image }
+              } catch (e) {
+                console.warn(`Token ${tokenId} validation failed:`, e.message)
+                return null
+              }
+            })
+            
+            try {
+              const results = await Promise.all(metadataPromises)
+              
+              for (const result of results) {
+                if (result) {
+                  walletTokens.push(result)
+                  validTokenCount++
+                  console.log(`✅ Validated token #${result.tokenId} (${validTokenCount}/${tokenIds.length})`)
+                }
               }
             } catch (e) {
-              console.warn(`Token ${tokenId} no longer exists or not owned`)
+              console.warn(`Metadata batch ${i} failed:`, e.message)
             }
             
-            // Small delay between validations
-            await new Promise(resolve => setTimeout(resolve, 100))
+            // Minimal delay between metadata batches
+            if (i + metadataBatchSize < tokenIds.length) {
+              await new Promise(resolve => setTimeout(resolve, 50))
+            }
           }
           
           if (validTokenCount > 0) {
