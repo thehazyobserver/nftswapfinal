@@ -171,28 +171,97 @@ export default function StonerFeePoolActions() {
         // For ERC404 contracts like StonerNFT, try to get Transfer events
         try {
           console.log('🔍 Trying event-based token discovery...')
-          const transferFilter = nftContract.filters.Transfer(null, addr)
-          const receivedEvents = await nftContract.queryFilter(transferFilter, 0, 'latest')
           
-          const outgoingFilter = nftContract.filters.Transfer(addr, null)
-          const sentEvents = await nftContract.queryFilter(outgoingFilter, 0, 'latest')
+          // Get current block number to limit the search range
+          const currentBlock = await provider.getBlockNumber()
+          const blocksToSearch = Math.min(50000, currentBlock) // Limit to last 50k blocks or from start
+          const fromBlock = Math.max(0, currentBlock - blocksToSearch)
           
-          // Create a set of token IDs the user has received
+          console.log(`📅 Searching events from block ${fromBlock} to ${currentBlock}`)
+          
+          // Query Transfer events in smaller chunks to avoid timeout
+          const chunkSize = 10000
           const receivedTokens = new Set()
-          receivedEvents.forEach(event => {
-            receivedTokens.add(event.args.id.toString())
-          })
           
-          // Remove tokens that were sent away
-          sentEvents.forEach(event => {
-            receivedTokens.delete(event.args.id.toString())
-          })
+          for (let startBlock = fromBlock; startBlock <= currentBlock; startBlock += chunkSize) {
+            const endBlock = Math.min(startBlock + chunkSize - 1, currentBlock)
+            
+            try {
+              console.log(`🔍 Searching blocks ${startBlock} to ${endBlock}`)
+              
+              // Get tokens received by user
+              const transferFilter = nftContract.filters.Transfer(null, addr)
+              const receivedEvents = await nftContract.queryFilter(transferFilter, startBlock, endBlock)
+              
+              receivedEvents.forEach(event => {
+                if (event.args && event.args.id) {
+                  receivedTokens.add(event.args.id.toString())
+                }
+              })
+              
+              // Get tokens sent by user (to remove from owned list)
+              const outgoingFilter = nftContract.filters.Transfer(addr, null)
+              const sentEvents = await nftContract.queryFilter(outgoingFilter, startBlock, endBlock)
+              
+              sentEvents.forEach(event => {
+                if (event.args && event.args.id) {
+                  receivedTokens.delete(event.args.id.toString())
+                }
+              })
+              
+              // Small delay to avoid rate limiting
+              if (endBlock < currentBlock) {
+                await new Promise(resolve => setTimeout(resolve, 100))
+              }
+            } catch (chunkError) {
+              console.warn(`Failed to search blocks ${startBlock}-${endBlock}:`, chunkError.message)
+              // Continue with next chunk
+              continue
+            }
+          }
           
           console.log(`📝 Found ${receivedTokens.size} tokens via events (expected ${balance})`)
           
+          // If we found fewer tokens than expected, try a direct ownership check approach
+          if (receivedTokens.size < Number(balance) && Number(balance) <= 100) {
+            console.log('🔍 Trying direct ownership verification approach...')
+            
+            // Try checking ownership of token IDs in common ranges
+            const commonRanges = [
+              { start: 1, end: Math.min(1000, Number(balance) + 100) },
+              { start: 1001, end: Math.min(2000, Number(balance) + 1100) },
+              { start: 10001, end: Math.min(11000, Number(balance) + 10100) }
+            ]
+            
+            for (const range of commonRanges) {
+              for (let tokenId = range.start; tokenId <= range.end && walletTokens.length < Number(balance); tokenId++) {
+                try {
+                  const owner = await nftContract.ownerOf(tokenId)
+                  if (owner.toLowerCase() === addr.toLowerCase()) {
+                    receivedTokens.add(tokenId.toString())
+                    console.log(`✅ Found owned token via direct check: #${tokenId}`)
+                  }
+                } catch (e) {
+                  // Token doesn't exist or other error, continue
+                  continue
+                }
+                
+                // Small delay to avoid rate limiting
+                if (tokenId % 50 === 0) {
+                  await new Promise(resolve => setTimeout(resolve, 50))
+                }
+              }
+              
+              // If we found enough tokens, break
+              if (receivedTokens.size >= Number(balance)) break
+            }
+          }
+          
           // Validate ownership and fetch metadata
-          const tokenIds = Array.from(receivedTokens)
-          for (const tokenId of tokenIds.slice(0, 50)) { // Limit to 50 for performance
+          const tokenIds = Array.from(receivedTokens).slice(0, 50) // Limit to 50 for performance
+          let validTokenCount = 0
+          
+          for (const tokenId of tokenIds) {
             try {
               // Verify current ownership
               const owner = await nftContract.ownerOf(tokenId)
@@ -215,13 +284,21 @@ export default function StonerFeePoolActions() {
                   console.warn('Failed to fetch metadata for token', tokenId)
                 }
                 walletTokens.push({ tokenId: tokenId.toString(), image })
+                validTokenCount++
+                console.log(`✅ Validated token #${tokenId} (${validTokenCount}/${balance})`)
               }
             } catch (e) {
               console.warn(`Token ${tokenId} no longer exists or not owned`)
             }
+            
+            // Small delay between validations
+            await new Promise(resolve => setTimeout(resolve, 100))
           }
           
-          foundViaEnumerable = true // Mark as found via alternative method
+          if (validTokenCount > 0) {
+            foundViaEnumerable = true // Mark as found via alternative method
+            console.log(`🎉 Successfully loaded ${validTokenCount} Stoner NFTs via event-based discovery`)
+          }
         } catch (eventError) {
           console.warn('Event-based discovery failed:', eventError.message)
         }
