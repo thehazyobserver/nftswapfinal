@@ -81,29 +81,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       
       setWalletLoading(true)
       setReceiptLoading(true)
-      
-      // Fetch contract info (pool size and staked count)
-      try {
-        const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
-        const info = await pool.getContractInfo()
-        setContractInfo({
-          nftCollection: info[0],
-          receiptContract: info[1], 
-          stonerPool: info[2],
-          swapFeeInWei: info[3],
-          stonerShare: info[4],
-          poolSize: Number(info[5]), // Available for swapping
-          stakedCount: Number(info[6]) // Staked for rewards
-        })
-        console.log('📊 Contract Info:', {
-          poolSize: Number(info[5]),
-          stakedCount: Number(info[6])
-        })
-      } catch (e) {
-        console.warn('Failed to fetch contract info:', e)
-        setContractInfo(null)
-      }
-      
+
       let addr = null
       if (window.ethereum) {
         try {
@@ -113,15 +91,22 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
       }
       setAddress(addr)
       
-      // Fetch wallet NFTs from the specific NFT collection that this SwapPool manages
+      // Only proceed with wallet-dependent operations if we have an address
+      if (!addr) {
+        setWalletNFTs([])
+        setWalletLoading(false)
+        setReceiptNFTs([])
+        setReceiptLoading(false)
+        setStakedNFTs([])
+        return
+      }
+      
+      // Get collection address from pool
       let swapCollectionAddr = null
       try {
         swapCollectionAddr = await (new ethers.Contract(swapPool, SwapPoolABI, provider)).nftCollection()
-        console.log(`🏷️ SwapPool NFT Collection Address:`, swapCollectionAddr)
         console.log(`👤 User Address:`, addr)
         console.log(`🏊 SwapPool Address:`, swapPool)
-        console.log(`🏊 SwapPool Address:`, swapPool)
-        setNftCollection(swapCollectionAddr)
         
         if (!swapCollectionAddr) {
           console.log('❌ Could not get NFT collection address from SwapPool')
@@ -431,12 +416,52 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         console.error('Failed to fetch receipt NFTs:', e)
         setReceiptNFTs([])
       }
+    }
+    
+    fetchNFTs()
+    // eslint-disable-next-line
+  }, [swapPool, stakeReceipt, address])
+
+  // Separate useEffect for pool-specific data (independent of wallet connection)
+  useEffect(() => {
+    const fetchPoolData = async () => {
+      // Use externalProvider for read-only, fallback to window.ethereum if not provided
+      const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
+      if (!provider) return
       
-      // Fetch pool NFTs (available for swapping)
+      setPoolLoading(true)
+      
       try {
         const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
+        
+        // Fetch contract info (pool size and staked count) - this should be available without wallet
+        try {
+          const info = await pool.getContractInfo()
+          setContractInfo({
+            nftCollection: info[0],
+            receiptContract: info[1], 
+            stonerPool: info[2],
+            swapFeeInWei: info[3],
+            stonerShare: info[4],
+            poolSize: Number(info[5]), // Available for swapping
+            stakedCount: Number(info[6]) // Staked for rewards
+          })
+          console.log('📊 Contract Info:', {
+            poolSize: Number(info[5]),
+            stakedCount: Number(info[6])
+          })
+        } catch (e) {
+          console.warn('Failed to fetch contract info:', e)
+          setContractInfo(null)
+        }
+        
+        // Get collection address
+        const swapCollectionAddr = await pool.nftCollection()
+        console.log(`🏷️ SwapPool NFT Collection Address:`, swapCollectionAddr)
+        setNftCollection(swapCollectionAddr)
+        
+        // Fetch pool NFTs (available for swapping) - this should work without wallet
         const poolTokenIdsRaw = await pool.getPoolTokens()
-        // Convert proxy result to actual array
         const poolTokenIds = Array.from(poolTokenIdsRaw).map(id => id.toString())
         console.log('🏊 Pool token IDs available for swap:', poolTokenIds)
         
@@ -478,15 +503,14 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         }
         setPoolLoading(false)
       } catch (e) {
-        console.error('❌ Failed to fetch pool NFTs:', e)
+        console.error('❌ Failed to fetch pool data:', e)
         setPoolNFTs([])
         setPoolLoading(false)
       }
     }
     
-    fetchNFTs()
-    // eslint-disable-next-line
-  }, [swapPool, stakeReceipt, address])
+    fetchPoolData()
+  }, [swapPool, stakeReceipt]) // Note: removed 'address' dependency
 
   // Listen for wallet account changes
   useEffect(() => {
