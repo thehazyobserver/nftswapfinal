@@ -72,6 +72,64 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
     // This will trigger the main useEffect to refetch NFTs
   }
 
+  // Helper function to fetch staked and receipt NFTs
+  const fetchStakedAndReceiptNFTs = async (addr, provider, swapPool) => {
+    // Fetch staked NFTs (getUserStakes)
+    try {
+      const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
+      if (addr) {
+        const staked = await pool.getUserStakes(addr)
+        setStakedNFTs(staked.map(t => t.toString()))
+      }
+    } catch (e) {
+      setStakedNFTs([])
+    }
+    
+    // Fetch receipt tokens (ERC721)
+    try {
+      const receipt = new ethers.Contract(stakeReceipt, [
+        "function balanceOf(address) view returns (uint256)", 
+        "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", 
+        "function tokenURI(uint256) view returns (string)",
+        "function receiptToOriginalToken(uint256) view returns (uint256)"
+      ], provider)
+      if (addr) {
+        const balance = await receipt.balanceOf(addr)
+        const tokens = []
+        for (let i = 0; i < Number(balance); i++) {
+          const receiptTokenId = await receipt.tokenOfOwnerByIndex(addr, i)
+          let image = null
+          
+          try {
+            let uri = await receipt.tokenURI(receiptTokenId)
+            if (uri && uri.startsWith('ipfs://')) {
+              uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+            }
+            if (uri && uri.startsWith('http')) {
+              try {
+                const resp = await fetch(uri)
+                const meta = await resp.json()
+                image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
+                if (image && image.startsWith('ipfs://')) {
+                  image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+              } catch (fetchErr) {
+                console.warn('Failed to fetch receipt metadata:', fetchErr)
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to fetch receipt NFT metadata/image', receiptTokenId, err)
+          }
+          tokens.push({ tokenId: receiptTokenId.toString(), image })
+        }
+        setReceiptNFTs(tokens)
+      }
+    } catch (e) {
+      console.error('Failed to fetch receipt NFTs:', e)
+      setReceiptNFTs([])
+    }
+  }
+
   // Fetch user's NFTs and staked/receipt tokens
   useEffect(() => {
     const fetchNFTs = async () => {
@@ -131,15 +189,19 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         )
         if (addr) {
           const balance = await nftContract.balanceOf(addr)
-          console.log(`🎯 Collection NFT Balance for ${addr}:`, balance.toString())
-          
-          // For ERC404 tokens, balanceOf might return 0 even when you own tokens
-          // So we always use fallback scanning for these types of collections
           const balanceNumber = Number(balance)
-          console.log(`🎯 Collection NFT Balance for ${addr}: ${balance.toString()}`)
+          console.log(`🎯 Collection NFT Balance for ${addr}: ${balanceNumber}`)
           
+          // Early return if balance is definitely 0 - no need to scan
           if (balanceNumber === 0) {
-            console.log(`⚠️ ERC404 token detected (balance=0), skipping enumerable approach and using fallback scan`)
+            console.log(`📭 No NFTs owned by user (balance=0), skipping scan`)
+            setWalletNFTs([])
+            setApprovedMap({})
+            setWalletLoading(false)
+            
+            // Still fetch staked and receipt NFTs
+            await fetchStakedAndReceiptNFTs(addr, provider, swapPool)
+            return
           }
           
           const tokens = []
@@ -333,89 +395,9 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         setWalletNFTs([])
         setWalletLoading(false)
       }
-      // Fetch staked NFTs (getUserStakes)
-      try {
-        const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
-        if (addr) {
-          const staked = await pool.getUserStakes(addr)
-          setStakedNFTs(staked.map(t => t.toString()))
-        }
-      } catch (e) {
-        setStakedNFTs([])
-      }
-      // Fetch receipt tokens (ERC721) with enhanced image loading
-      try {
-        const receipt = new ethers.Contract(stakeReceipt, [
-          "function balanceOf(address) view returns (uint256)", 
-          "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", 
-          "function tokenURI(uint256) view returns (string)",
-          "function receiptToOriginalToken(uint256) view returns (uint256)"
-        ], provider)
-        if (addr) {
-          const balance = await receipt.balanceOf(addr)
-          const tokens = []
-          for (let i = 0; i < Number(balance); i++) {
-            const receiptTokenId = await receipt.tokenOfOwnerByIndex(addr, i)
-            let image = null
-            
-            try {
-              // First, try to get the receipt's own tokenURI
-              let uri = await receipt.tokenURI(receiptTokenId)
-              console.log(`Receipt token ${receiptTokenId} URI:`, uri)
-              
-              if (uri && uri.startsWith('ipfs://')) {
-                uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-              }
-              if (uri && uri.startsWith('http')) {
-                try {
-                  const resp = await fetch(uri)
-                  const meta = await resp.json()
-                  image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-                  if (image && image.startsWith('ipfs://')) {
-                    image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                } catch (fetchErr) {
-                  console.warn('Failed to fetch receipt metadata:', fetchErr)
-                }
-              }
-              
-              // If receipt doesn't have metadata, try to get the original NFT's image
-              if (!image && swapCollectionAddr) {
-                try {
-                  const originalTokenId = await receipt.receiptToOriginalToken(receiptTokenId)
-                  console.log(`Receipt ${receiptTokenId} maps to original token ${originalTokenId}`)
-                  
-                  const nftContract = new ethers.Contract(swapCollectionAddr, [
-                    "function tokenURI(uint256) view returns (string)"
-                  ], provider)
-                  
-                  let originalUri = await nftContract.tokenURI(originalTokenId)
-                  if (originalUri && originalUri.startsWith('ipfs://')) {
-                    originalUri = originalUri.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                  if (originalUri && originalUri.startsWith('http')) {
-                    const resp = await fetch(originalUri)
-                    const meta = await resp.json()
-                    image = meta.image || meta.image_url || (meta.properties && meta.properties.image) || null
-                    if (image && image.startsWith('ipfs://')) {
-                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                    }
-                  }
-                } catch (originalErr) {
-                  console.warn('Failed to fetch original NFT metadata for receipt:', originalErr)
-                }
-              }
-            } catch (err) {
-              console.warn('Failed to fetch receipt NFT metadata/image', receiptTokenId, err)
-            }
-            tokens.push({ tokenId: receiptTokenId.toString(), image })
-          }
-          setReceiptNFTs(tokens)
-        }
-      } catch (e) {
-        console.error('Failed to fetch receipt NFTs:', e)
-        setReceiptNFTs([])
-      }
+      
+      // Fetch staked and receipt NFTs
+      await fetchStakedAndReceiptNFTs(addr, provider, swapPool)
     }
     
     fetchNFTs()
@@ -425,6 +407,28 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
   // Separate useEffect for pool-specific data (independent of wallet connection)
   useEffect(() => {
     const fetchPoolData = async () => {
+      // Check cache first
+      const cacheKey = `pool_data_${swapPool}`
+      const cached = sessionStorage.getItem(cacheKey)
+      
+      if (cached) {
+        try {
+          const data = JSON.parse(cached)
+          const cacheAge = Date.now() - data.timestamp
+          // Use cache if less than 2 minutes old
+          if (cacheAge < 120000) {
+            console.log('📦 Using cached pool data')
+            setContractInfo(data.contractInfo)
+            setNftCollection(data.nftCollection)
+            setPoolNFTs(data.poolNFTs)
+            setPoolLoading(false)
+            return
+          }
+        } catch (e) {
+          console.warn('Failed to parse cached pool data:', e)
+        }
+      }
+      
       // Use externalProvider for read-only, fallback to window.ethereum if not provided
       const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
       if (!provider) return
@@ -435,9 +439,10 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         const pool = new ethers.Contract(swapPool, SwapPoolABI, provider)
         
         // Fetch contract info (pool size and staked count) - this should be available without wallet
+        let contractInfo = null
         try {
           const info = await pool.getContractInfo()
-          setContractInfo({
+          contractInfo = {
             nftCollection: info[0],
             receiptContract: info[1], 
             stonerPool: info[2],
@@ -445,10 +450,11 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             stonerShare: info[4],
             poolSize: Number(info[5]), // Available for swapping
             stakedCount: Number(info[6]) // Staked for rewards
-          })
+          }
+          setContractInfo(contractInfo)
           console.log('📊 Contract Info:', {
-            poolSize: Number(info[5]),
-            stakedCount: Number(info[6])
+            poolSize: contractInfo.poolSize,
+            stakedCount: contractInfo.stakedCount
           })
         } catch (e) {
           console.warn('Failed to fetch contract info:', e)
@@ -465,6 +471,7 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         const poolTokenIds = Array.from(poolTokenIdsRaw).map(id => id.toString())
         console.log('🏊 Pool token IDs available for swap:', poolTokenIds)
         
+        let poolNFTs = []
         if (swapCollectionAddr && poolTokenIds.length > 0) {
           const poolNftContract = new ethers.Contract(swapCollectionAddr, [
             "function tokenURI(uint256) view returns (string)"
@@ -495,13 +502,28 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             }
             tokens.push({ tokenId: tokenId.toString(), image })
           }
-          setPoolNFTs(tokens)
+          poolNFTs = tokens
           console.log('✅ Pool NFTs fetched:', tokens.length, tokens)
         } else {
           console.log('📭 No pool NFTs available or collection address missing')
-          setPoolNFTs([])
         }
+        
+        setPoolNFTs(poolNFTs)
         setPoolLoading(false)
+        
+        // Cache the results
+        try {
+          const cacheData = {
+            contractInfo,
+            nftCollection: swapCollectionAddr,
+            poolNFTs,
+            timestamp: Date.now()
+          }
+          sessionStorage.setItem(cacheKey, JSON.stringify(cacheData))
+        } catch (e) {
+          console.warn('Failed to cache pool data:', e)
+        }
+        
       } catch (e) {
         console.error('❌ Failed to fetch pool data:', e)
         setPoolNFTs([])
