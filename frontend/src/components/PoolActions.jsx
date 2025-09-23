@@ -189,70 +189,74 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             tokenIds = [] // Force fallback
           }
           
-          // If we still don't have tokens, try fallback scan
+          // If we still don't have tokens, try optimized direct ownership scan
           if (tokenIds.length === 0) {
             try {
-              // Try to get total supply to know how many tokens exist
-              let maxTokenId = 10000 // Default fallback range
+              console.log('🎯 Starting optimized direct ownership scan for Collection NFTs...')
+              
+              // Try to get total supply to know scan range
+              let maxTokenId = 2000 // Reasonable default for most collections
               try {
                 const totalSupply = await nftContract.totalSupply()
-                maxTokenId = Math.min(Number(totalSupply) + 100, 10000) // Scan a bit beyond totalSupply but cap at 10k
+                maxTokenId = Math.min(Number(totalSupply) + 100, 2000) // Scan a bit beyond totalSupply but cap at 2k
                 console.log(`📈 Collection NFT Total supply: ${totalSupply.toString()}, scanning up to token ${maxTokenId}`)
               } catch {
                 console.log(`📈 Total supply not available, scanning up to token ${maxTokenId}`)
               }
 
-              const ownedTokens = []
-              const batchSize = 50 // Check 50 tokens at a time to avoid rate limits
+              const receivedTokens = new Set()
+              const batchSize = 20 // Smaller batches for better performance
+              let foundCount = 0
+              const targetCount = balanceNumber > 0 ? Number(balanceNumber) : 100 // If balance is 0 (ERC404), scan up to 100
               
-              for (let startId = 1; startId <= maxTokenId; startId += batchSize) {
-                const endId = Math.min(startId + batchSize - 1, maxTokenId)
-                const batch = []
+              // Direct ownership checking in batches
+              for (let start = 1; start <= maxTokenId && foundCount < targetCount; start += batchSize) {
+                const end = Math.min(start + batchSize - 1, maxTokenId)
                 
-                // Create batch of ownership checks
-                for (let tokenId = startId; tokenId <= endId; tokenId++) {
-                  batch.push(
+                // Create batch of ownership check promises
+                const ownershipPromises = []
+                for (let tokenId = start; tokenId <= end; tokenId++) {
+                  ownershipPromises.push(
                     nftContract.ownerOf(tokenId)
-                      .then(owner => ({ tokenId, owner }))
-                      .catch(() => null) // Token doesn't exist or other error
+                      .then(owner => ({ tokenId, owner: owner.toLowerCase() }))
+                      .catch(() => ({ tokenId, owner: null })) // Token doesn't exist
                   )
                 }
                 
-                // Wait for batch to complete
-                const batchResults = await Promise.all(batch)
-                
-                // Filter for tokens owned by user
-                const ownedInBatch = batchResults
-                  .filter(result => result && result.owner.toLowerCase() === addr.toLowerCase())
-                  .map(result => BigInt(result.tokenId))
-                
-                ownedTokens.push(...ownedInBatch)
-                
-                // Log progress for large scans
-                if (startId % 200 === 1) {
-                  console.log(`🔍 Scanned tokens ${startId}-${endId}, found ${ownedTokens.length} owned tokens so far`)
+                try {
+                  // Execute batch in parallel
+                  const results = await Promise.all(ownershipPromises)
+                  
+                  // Process results
+                  for (const { tokenId, owner } of results) {
+                    if (owner === addr.toLowerCase()) {
+                      receivedTokens.add(tokenId.toString())
+                      foundCount++
+                      console.log(`✅ Found owned token via direct check: #${tokenId} (${foundCount}/${targetCount})`)
+                      
+                      // Stop early if we found enough tokens for realistic balance
+                      if (balanceNumber > 0 && foundCount >= Number(balanceNumber)) break
+                    }
+                  }
+                } catch (e) {
+                  console.warn(`Batch ${start}-${end} failed:`, e.message)
                 }
                 
-                // For efficiency, if balance was realistic and we found all tokens, stop
-                // But if balance is unrealistic, continue scanning to find all actual tokens
-                if (isBalanceRealistic && ownedTokens.length >= balanceNumber) {
-                  console.log(`✅ Found all ${ownedTokens.length} tokens according to realistic balance, stopping scan early`)
-                  break
-                }
+                // Quick break if we found enough
+                if (balanceNumber > 0 && foundCount >= Number(balanceNumber)) break
+                
+                // Small delay between batches to avoid rate limits
+                await new Promise(resolve => setTimeout(resolve, 50))
               }
               
-              tokenIds = ownedTokens
-              console.log(`✅ Collection NFT fallback scan complete, found ${tokenIds.length} tokens:`, tokenIds.map(id => id.toString()))
+              tokenIds = Array.from(receivedTokens).map(id => BigInt(id))
+              console.log(`✅ Direct ownership scan complete, found ${tokenIds.length} tokens:`, tokenIds.map(id => id.toString()))
               
               if (balanceNumber === 0 && tokenIds.length > 0) {
                 console.log(`✅ ERC404 token detection successful: balance=0 but found ${tokenIds.length} actual tokens`)
-              } else if (isBalanceRealistic && balanceNumber > 0 && tokenIds.length !== balanceNumber) {
-                console.warn(`⚠️ Collection NFT count mismatch: balance=${balance.toString()}, found=${tokenIds.length}`)
-              } else if (balanceNumber > 10000) {
-                console.log(`✅ Found ${tokenIds.length} Collection NFTs (balance was unrealistic: ${balance.toString()})`)
               }
             } catch (fallbackError) {
-              console.error('❌ Fallback token scanning failed:', fallbackError)
+              console.error('❌ Direct ownership scan failed:', fallbackError)
               tokenIds = []
             }
           }
