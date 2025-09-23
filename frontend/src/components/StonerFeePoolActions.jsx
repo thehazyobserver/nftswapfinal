@@ -165,8 +165,66 @@ export default function StonerFeePoolActions() {
           }
         }
       } catch (e) {
-        console.log('❌ tokenOfOwnerByIndex not supported, trying alternative approach')
+        console.log('❌ tokenOfOwnerByIndex not supported (ERC404 contract), trying event-based approach')
         foundViaEnumerable = false
+        
+        // For ERC404 contracts like StonerNFT, try to get Transfer events
+        try {
+          console.log('🔍 Trying event-based token discovery...')
+          const transferFilter = nftContract.filters.Transfer(null, addr)
+          const receivedEvents = await nftContract.queryFilter(transferFilter, 0, 'latest')
+          
+          const outgoingFilter = nftContract.filters.Transfer(addr, null)
+          const sentEvents = await nftContract.queryFilter(outgoingFilter, 0, 'latest')
+          
+          // Create a set of token IDs the user has received
+          const receivedTokens = new Set()
+          receivedEvents.forEach(event => {
+            receivedTokens.add(event.args.id.toString())
+          })
+          
+          // Remove tokens that were sent away
+          sentEvents.forEach(event => {
+            receivedTokens.delete(event.args.id.toString())
+          })
+          
+          console.log(`📝 Found ${receivedTokens.size} tokens via events (expected ${balance})`)
+          
+          // Validate ownership and fetch metadata
+          const tokenIds = Array.from(receivedTokens)
+          for (const tokenId of tokenIds.slice(0, 50)) { // Limit to 50 for performance
+            try {
+              // Verify current ownership
+              const owner = await nftContract.ownerOf(tokenId)
+              if (owner.toLowerCase() === addr.toLowerCase()) {
+                let image = null
+                try {
+                  let uri = await nftContract.tokenURI(tokenId)
+                  if (uri.startsWith('ipfs://')) {
+                    uri = uri.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                  if (uri.startsWith('http')) {
+                    const resp = await fetch(uri)
+                    const meta = await resp.json()
+                    image = meta.image || meta.image_url
+                    if (image && image.startsWith('ipfs://')) {
+                      image = image.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Failed to fetch metadata for token', tokenId)
+                }
+                walletTokens.push({ tokenId: tokenId.toString(), image })
+              }
+            } catch (e) {
+              console.warn(`Token ${tokenId} no longer exists or not owned`)
+            }
+          }
+          
+          foundViaEnumerable = true // Mark as found via alternative method
+        } catch (eventError) {
+          console.warn('Event-based discovery failed:', eventError.message)
+        }
       }
       
       // If enumerable didn't work or found fewer tokens than expected, try multicall brute force
