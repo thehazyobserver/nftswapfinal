@@ -945,7 +945,7 @@ export default function StonerFeePoolActions() {
           ) : (
             <>
               <div className="grid grid-cols-4 gap-3">
-                {walletNFTs.slice(0, 12).map((nft) => (
+                {walletNFTs.map((nft) => (
                   <div
                     key={nft.tokenId}
                     className={`relative cursor-pointer rounded-lg border-2 transition-all ${
