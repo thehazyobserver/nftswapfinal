@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import PoolList from './components/PoolList';
 import SwapDiagnostics from './components/SwapDiagnostics';
 import StonerStaking from './pages/StonerStaking';
 
 export default function App() {
+  const location = useLocation();
   const [isDark, setIsDark] = useState(() => {
     // Check localStorage first, default to true (dark mode)
     if (typeof window !== 'undefined') {
@@ -31,7 +32,14 @@ export default function App() {
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-indigo-600 via-blue-500 to-teal-400 bg-clip-text text-transparent drop-shadow">NFT Swap Dashboard</h1>
             </div>
             <div className="flex items-center gap-3">
-              <Link to="/staking" className="px-4 py-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-semibold text-sm shadow hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors">Stoner Staking</Link>
+              {location.pathname === '/' && (
+                <Link to="/staking" className="px-4 py-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-semibold text-sm shadow hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors">Stoner Staking</Link>
+              )}
+              {location.pathname === '/staking' && (
+                <Link to="/" className="px-4 py-2 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-semibold text-sm shadow hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors flex items-center gap-2">
+                  ← Back to Swap Pools
+                </Link>
+              )}
               <button
                 onClick={() => setIsDark(!isDark)}
                 className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
