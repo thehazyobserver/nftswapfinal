@@ -1,5 +1,5 @@
 import React from 'react'
-import PoolActions from './PoolActions'
+import PoolActionsNew from './PoolActionsNew'
 import NFTCollectionImage from './NFTCollectionImage'
 
 export default function PoolDetail({ pool, collectionName, onClose, provider }) {
@@ -33,7 +33,7 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
           <button className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>Copy Address</button>
         </div>
 
-  <PoolActions swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} provider={provider} />
+  <PoolActionsNew swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} provider={provider} />
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import StonerFeePoolABI from '../abis/StonerFeePool.json'
 import StakeReceiptABI from '../abis/StakeReceipt.json'
 import NFTTokenImage from './NFTTokenImage'
 import StonerNFTABI from '../abis/StonerNFT.json'
-import contractAddresses from '../../public/contracts.json'
+import contractAddresses from '../contracts.json'
 
 const STONER_FEE_POOL_ADDRESS = contractAddresses.stonerFeePool
 const STONER_STAKE_RECEIPT_ADDRESS = contractAddresses.stonerStakeReceipt

@@ -1,0 +1,8 @@
+{
+  "factoryAddress": "0x1Db92C2F11b7716f3fa6E94969a8649a32adB1De",
+  "dashboardAddress": "0x1Db92C2F11b7716f3fa6E94969a8649a32adB1De",
+  "stonerStakeReceipt": "0xB6748d708B5Cda0eA8c53e7072566971FCCb6b49",
+  "stonerFeePool": "0x5777fc6ca7f6BDc02dF3323A0C05970bB9D05b74",
+  "boatStakeReceipt": "0x5D10fb35266884804AfDec1A51fc6c200FE5463A",
+  "boatSwapPool": "0x4C6D6010b75f5Da44598B74111fAEa9713dDd6da"
+}
