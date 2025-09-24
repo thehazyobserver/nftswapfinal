@@ -4,6 +4,8 @@ import PoolList from './components/PoolList';
 import StonerStaking from './pages/StonerStaking';
 import NetworkChecker from './components/NetworkChecker';
 import { ToastProvider } from './components/ToastProvider';
+import { WalletProvider } from './components/WalletProvider';
+import WalletButton from './components/WalletButton';
 
 export default function App() {
   const location = useLocation();
@@ -23,8 +25,9 @@ export default function App() {
   }, [isDark])
   
   return (
-    <ToastProvider>
-      <div className="min-h-screen p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:bg-gradient-to-br dark:from-zinc-900 dark:via-gray-900 dark:to-slate-900 text-gray-900 dark:text-gray-100">
+    <WalletProvider>
+      <ToastProvider>
+        <div className="min-h-screen p-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:bg-gradient-to-br dark:from-zinc-900 dark:via-gray-900 dark:to-slate-900 text-gray-900 dark:text-gray-100">
         <NetworkChecker />
         <div className="max-w-6xl mx-auto p-2 sm:p-4 md:p-6 w-full">
           <header className="flex flex-col sm:flex-row items-center justify-between mb-8 py-6 px-4 sm:px-6 rounded-2xl shadow-xl bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg gap-4 border border-gray-200 dark:border-gray-700 animate-slide-up">
@@ -52,6 +55,7 @@ export default function App() {
                   ← Back to Swap Pools
                 </Link>
               )}
+              <WalletButton />
               <button
                 onClick={() => setIsDark(!isDark)}
                 className="p-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow-md"
@@ -74,5 +78,6 @@ export default function App() {
         </div>
       </div>
     </ToastProvider>
+  </WalletProvider>
   );
 }

@@ -118,12 +118,339 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     setApprovingAll(false)
   }
 
-  // Add the refreshNFTs and other utility functions here (shortened for brevity)
+  // Complete NFT fetching logic
   const refreshNFTs = async () => {
-    // Implementation would be same as original PoolActions
     console.log('Refreshing NFT data...')
+    setWalletLoading(true)
+    setReceiptLoading(true)
+    setPoolLoading(true)
+    
+    // Clear existing data
+    setWalletNFTs([])
+    setReceiptNFTs([])
+    setPoolNFTs([])
+    setAddress(null)
+    
+    // Small delay to show loading state
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Re-fetch everything
+    const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
+    if (!provider) {
+      setWalletLoading(false)
+      setReceiptLoading(false)
+      setPoolLoading(false)
+      return
+    }
+    
+    let addr = null
+    if (window.ethereum) {
+      try {
+        const signer = await provider.getSigner()
+        addr = await signer.getAddress()
+      } catch (e) {
+        console.warn('Could not get signer:', e)
+      }
+    }
+    setAddress(addr)
+    
+    // If no address, clear everything and return
+    if (!addr) {
+      setWalletNFTs([])
+      setWalletLoading(false)
+      setReceiptNFTs([])
+      setReceiptLoading(false)
+      setStakedNFTs([])
+      setPoolNFTs([])
+      setPoolLoading(false)
+      return
+    }
+
+    // Fetch all NFT data in parallel
+    await Promise.all([
+      fetchWalletNFTs(addr, provider),
+      fetchReceiptNFTs(addr, provider),
+      fetchPoolNFTs(provider),
+      fetchStakedNFTs(addr, provider)
+    ])
+    
     // Fetch rewards when refreshing
     await fetchPendingRewards()
+  }
+
+  const fetchWalletNFTs = async (addr, provider) => {
+    try {
+      // Get collection address from pool
+      const poolContract = new ethers.Contract(swapPool, SwapPoolABI, provider)
+      const collectionAddr = await poolContract.nftCollection()
+      setNftCollection(collectionAddr)
+      
+      if (!collectionAddr) {
+        console.log('❌ Could not get NFT collection address from SwapPool')
+        setWalletNFTs([])
+        setWalletLoading(false)
+        return
+      }
+      
+      const nftContract = new ethers.Contract(
+        collectionAddr,
+        [
+          "function balanceOf(address) view returns (uint256)",
+          "function ownerOf(uint256) view returns (address)",
+          "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)",
+          "function tokenURI(uint256) view returns (string)",
+          "function getApproved(uint256) view returns (address)",
+          "function isApprovedForAll(address,address) view returns (bool)",
+          "function totalSupply() view returns (uint256)"
+        ],
+        provider
+      )
+      
+      const balance = await nftContract.balanceOf(addr)
+      const balanceNumber = Number(balance)
+      console.log(`🎯 Collection NFT Balance for ${addr}: ${balanceNumber}`)
+      
+      if (balanceNumber === 0) {
+        console.log(`📭 No NFTs owned by user (balance=0)`)
+        setWalletNFTs([])
+        setApprovedMap({})
+        setWalletLoading(false)
+        return
+      }
+      
+      // Check isApprovedForAll
+      let approvedAll = false
+      try {
+        approvedAll = await nftContract.isApprovedForAll(addr, swapPool)
+      } catch {}
+      setIsApprovedForAll(!!approvedAll)
+
+      let tokenIds = []
+      
+      // Try enumerable approach first
+      if (balanceNumber > 0 && balanceNumber <= 1000) {
+        try {
+          console.log(`🔍 Trying enumerable approach for ${balance.toString()} tokens...`)
+          const tokenIdPromises = []
+          for (let i = 0; i < balanceNumber; i++) {
+            tokenIdPromises.push(nftContract.tokenOfOwnerByIndex(addr, i))
+          }
+          tokenIds = await Promise.all(tokenIdPromises)
+          console.log(`✅ Enumerable approach successful, found tokens:`, tokenIds.map(id => id.toString()))
+        } catch (enumerableError) {
+          console.log(`❌ tokenOfOwnerByIndex not supported, using fallback scan`)
+          tokenIds = []
+        }
+      }
+      
+      // Fallback: Direct ownership scan if enumerable failed
+      if (tokenIds.length === 0) {
+        console.log('🎯 Starting direct ownership scan...')
+        
+        let maxTokenId = 2000
+        try {
+          const totalSupply = await nftContract.totalSupply()
+          maxTokenId = Math.min(Number(totalSupply) + 100, 2000)
+          console.log(`📈 Total supply: ${totalSupply.toString()}, scanning up to token ${maxTokenId}`)
+        } catch {
+          console.log(`📈 Total supply not available, scanning up to token ${maxTokenId}`)
+        }
+
+        const receivedTokens = new Set()
+        const batchSize = 20
+        let foundCount = 0
+        const targetCount = Number(balanceNumber)
+        
+        for (let start = 1; start <= maxTokenId && foundCount < targetCount; start += batchSize) {
+          const end = Math.min(start + batchSize - 1, maxTokenId)
+          
+          const ownershipPromises = []
+          for (let tokenId = start; tokenId <= end; tokenId++) {
+            ownershipPromises.push(
+              nftContract.ownerOf(tokenId)
+                .then(owner => ({ tokenId, owner: owner.toLowerCase() }))
+                .catch(() => ({ tokenId, owner: null }))
+            )
+          }
+          
+          try {
+            const results = await Promise.all(ownershipPromises)
+            
+            for (const { tokenId, owner } of results) {
+              if (owner === addr.toLowerCase()) {
+                receivedTokens.add(tokenId.toString())
+                foundCount++
+                console.log(`✅ Found owned token: #${tokenId} (${foundCount}/${targetCount})`)
+                
+                if (foundCount >= targetCount) break
+              }
+            }
+          } catch (e) {
+            console.warn(`Batch ${start}-${end} failed:`, e.message)
+          }
+          
+          if (foundCount >= targetCount) break
+          await new Promise(resolve => setTimeout(resolve, 50))
+        }
+        
+        tokenIds = Array.from(receivedTokens).map(id => BigInt(id))
+        console.log(`✅ Direct ownership scan complete, found ${tokenIds.length} tokens`)
+      }
+      
+      // Convert to NFT objects with metadata
+      const nftPromises = tokenIds.map(async (tokenId) => {
+        try {
+          const tokenIdStr = tokenId.toString()
+          let tokenURI = ''
+          try {
+            tokenURI = await nftContract.tokenURI(tokenId)
+          } catch {}
+          
+          // Check individual approval
+          let approved = false
+          try {
+            const approvedAddr = await nftContract.getApproved(tokenId)
+            approved = approvedAddr.toLowerCase() === swapPool.toLowerCase()
+          } catch {}
+          
+          return {
+            tokenId: tokenIdStr,
+            image: tokenURI,
+            approved
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch metadata for token ${tokenId}:`, error)
+          return {
+            tokenId: tokenId.toString(),
+            image: '',
+            approved: false
+          }
+        }
+      })
+      
+      const nfts = await Promise.all(nftPromises)
+      console.log(`📦 Wallet NFTs loaded:`, nfts.length)
+      
+      // Create approval map
+      const newApprovedMap = {}
+      nfts.forEach(nft => {
+        newApprovedMap[nft.tokenId] = nft.approved
+      })
+      
+      setWalletNFTs(nfts)
+      setApprovedMap(newApprovedMap)
+      
+    } catch (error) {
+      console.error('Failed to fetch wallet NFTs:', error)
+      setWalletNFTs([])
+      setApprovedMap({})
+    } finally {
+      setWalletLoading(false)
+    }
+  }
+
+  const fetchReceiptNFTs = async (addr, provider) => {
+    try {
+      const receiptContract = new ethers.Contract(stakeReceipt, [
+        "function balanceOf(address) view returns (uint256)", 
+        "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", 
+        "function tokenURI(uint256) view returns (string)",
+        "function receiptToOriginalToken(uint256) view returns (uint256)"
+      ], provider)
+      
+      const balance = await receiptContract.balanceOf(addr)
+      const tokens = []
+      
+      for (let i = 0; i < Number(balance); i++) {
+        try {
+          const receiptTokenId = await receiptContract.tokenOfOwnerByIndex(addr, i)
+          const originalTokenId = await receiptContract.receiptToOriginalToken(receiptTokenId)
+          
+          let tokenURI = ''
+          try {
+            tokenURI = await receiptContract.tokenURI(receiptTokenId)
+          } catch {}
+          
+          tokens.push({
+            tokenId: receiptTokenId.toString(),
+            originalTokenId: originalTokenId.toString(),
+            image: tokenURI
+          })
+        } catch (error) {
+          console.warn(`Failed to fetch receipt token ${i}:`, error)
+        }
+      }
+      
+      console.log(`🧾 Receipt NFTs loaded:`, tokens.length)
+      setReceiptNFTs(tokens)
+      
+    } catch (error) {
+      console.error('Failed to fetch receipt NFTs:', error)
+      setReceiptNFTs([])
+    } finally {
+      setReceiptLoading(false)
+    }
+  }
+
+  const fetchPoolNFTs = async (provider) => {
+    try {
+      const poolContract = new ethers.Contract(swapPool, SwapPoolABI, provider)
+      const poolTokenIds = await poolContract.getPoolTokens()
+      
+      // Get collection address for metadata
+      const collectionAddr = await poolContract.nftCollection()
+      if (!collectionAddr) {
+        setPoolNFTs([])
+        setPoolLoading(false)
+        return
+      }
+      
+      const nftContract = new ethers.Contract(collectionAddr, [
+        "function tokenURI(uint256) view returns (string)"
+      ], provider)
+      
+      const poolNftPromises = poolTokenIds.map(async (tokenId) => {
+        try {
+          let tokenURI = ''
+          try {
+            tokenURI = await nftContract.tokenURI(tokenId)
+          } catch {}
+          
+          return {
+            tokenId: tokenId.toString(),
+            image: tokenURI
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch pool NFT metadata for token ${tokenId}:`, error)
+          return {
+            tokenId: tokenId.toString(),
+            image: ''
+          }
+        }
+      })
+      
+      const poolNfts = await Promise.all(poolNftPromises)
+      console.log(`🏊 Pool NFTs loaded:`, poolNfts.length)
+      setPoolNFTs(poolNfts)
+      
+    } catch (error) {
+      console.error('Failed to fetch pool NFTs:', error)
+      setPoolNFTs([])
+    } finally {
+      setPoolLoading(false)
+    }
+  }
+
+  const fetchStakedNFTs = async (addr, provider) => {
+    try {
+      const poolContract = new ethers.Contract(swapPool, SwapPoolABI, provider)
+      const staked = await poolContract.getUserStakes(addr)
+      setStakedNFTs(staked.map(t => t.toString()))
+      console.log(`🔒 Staked NFTs loaded:`, staked.length)
+    } catch (error) {
+      console.error('Failed to fetch staked NFTs:', error)
+      setStakedNFTs([])
+    }
   }
 
   const fetchPendingRewards = async () => {

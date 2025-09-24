@@ -3,6 +3,7 @@ import { ethers } from 'ethers'
 import FactoryABI from '../abis/MultiPoolFactoryNonProxy.json'
 import PoolDetail from './PoolDetail'
 import NFTCollectionImage from './NFTCollectionImage'
+import { useWallet } from './WalletProvider'
 
 // Helper to fetch ERC721 name
 async function fetchCollectionName(address, provider) {
@@ -15,9 +16,7 @@ async function fetchCollectionName(address, provider) {
 }
 
 export default function PoolList() {
-  const [provider, setProvider] = useState(null)
-  const [signer, setSigner] = useState(null)
-  const [address, setAddress] = useState(null)
+  const { address, provider, signer, isConnected, isCorrectNetwork } = useWallet()
   const [pools, setPools] = useState([])
   const [poolNames, setPoolNames] = useState({})
   const [loading, setLoading] = useState(false)
@@ -148,25 +147,7 @@ export default function PoolList() {
     init()
   }, [])
 
-  const connect = async () => {
-    if (!window.ethereum) {
-      setErrorMessage('Please install MetaMask or another wallet')
-      return
-    }
-    setErrorMessage('')
-    try {
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-      const p = new ethers.BrowserProvider(window.ethereum)
-      const s = await p.getSigner()
-      const addr = await s.getAddress()
-      setProvider(p)
-      setSigner(s)
-      setAddress(addr)
-    } catch (err) {
-      setErrorMessage('Failed to connect wallet: ' + (err.message || err.toString()))
-      console.error(err)
-    }
-  }
+
 
   const fetchPools = async () => {
     if (!factoryAddress) {
@@ -265,23 +246,6 @@ export default function PoolList() {
 
   return (
     <div className="space-y-6">
-      {/* Wallet Connection Section */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-card/50 rounded-xl border border-accent/10">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${address ? 'bg-green-400' : provider ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
-            <span className="text-sm font-medium">
-              {address ? `Connected: ${address.slice(0,6)}...${address.slice(-4)}` : provider ? 'Provider Ready' : 'Not Connected'}
-            </span>
-          </div>
-        </div>
-        <button 
-          className="px-4 py-2 bg-accent text-white rounded-lg shadow hover:bg-accent/80 transition-colors font-medium" 
-          onClick={connect}
-        >
-          {address ? 'Connected' : 'Connect Wallet'}
-        </button>
-      </div>
 
       {/* Error Messages */}
       {errorMessage && (

@@ -5,6 +5,7 @@ import StakeReceiptABI from '../abis/StakeReceipt.json'
 import NFTTokenImage from './NFTTokenImage'
 import StonerNFTABI from '../abis/StonerNFT.json'
 import contractAddresses from '../contracts.json'
+import { useWallet } from './WalletProvider'
 
 const STONER_FEE_POOL_ADDRESS = contractAddresses.stonerFeePool
 const STONER_STAKE_RECEIPT_ADDRESS = contractAddresses.stonerStakeReceipt
@@ -12,6 +13,7 @@ const STONER_NFT_ADDRESS = '0x9b567e03d891F537b2B7874aA4A3308Cfe2F4FBb'
 
 export default function StonerFeePoolActions() {
   console.log('🎯 StonerFeePoolActions component loaded!')
+  const { address: walletAddress, signer, provider, isConnected: isWalletConnected, isCorrectNetwork } = useWallet()
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [walletNFTs, setWalletNFTs] = useState([])
@@ -20,85 +22,27 @@ export default function StonerFeePoolActions() {
   const [selectedStakedTokens, setSelectedStakedTokens] = useState([])
   const [isApprovedForAll, setIsApprovedForAll] = useState(false)
   
-  // Wallet connection state
-  const [isWalletConnected, setIsWalletConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState('')
-  const [connectingWallet, setConnectingWallet] = useState(false)
-  
   // Rewards state
   const [nativeRewards, setNativeRewards] = useState('0')
   const [erc20Rewards, setErc20Rewards] = useState([])
   const [whitelistedTokens, setWhitelistedTokens] = useState([])
   const [rewardsLoading, setRewardsLoading] = useState(false)
 
-  // Check wallet connection status
-  const checkWalletConnection = async () => {
-    if (!window.ethereum) return false
-    
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' })
-      if (accounts.length > 0) {
-        setWalletAddress(accounts[0])
-        setIsWalletConnected(true)
-        return true
-      }
-    } catch (e) {
-      console.warn('Failed to check wallet connection:', e.message)
-    }
-    
-    return false
-  }
-
-  // Connect wallet explicitly
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      setStatus('Please install MetaMask or another wallet')
-      return false
-    }
-    
-    setConnectingWallet(true)
-    setStatus('')
-    
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
-      if (accounts.length > 0) {
-        setWalletAddress(accounts[0])
-        setIsWalletConnected(true)
-        setStatus('Wallet connected successfully!')
-        return true
-      }
-    } catch (e) {
-      if (e.code === 4001) {
-        setStatus('Wallet connection rejected by user')
-      } else {
-        setStatus('Failed to connect wallet: ' + e.message)
-      }
-      console.warn('Wallet connection failed:', e.message)
-    } finally {
-      setConnectingWallet(false)
-    }
-    
-    return false
-  }
-
   const getSigner = async () => {
-    if (!window.ethereum) throw new Error('Wallet not found')
-    const provider = new ethers.BrowserProvider(window.ethereum)
-    return provider.getSigner()
+    if (!signer) throw new Error('Wallet not connected')
+    return signer
   }
 
   // Fetch NFTs function (separate for refresh capability)
   const fetchNFTs = async () => {
     console.log('🎯 fetchNFTs called in StonerFeePoolActions')
-    if (!window.ethereum || !isWalletConnected) {
+    if (!isWalletConnected || !provider || !walletAddress) {
       console.log('❌ Wallet not connected, skipping NFT fetch')
       return
     }
     
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const signer = await provider.getSigner()
-      const addr = await signer.getAddress()
+      const addr = walletAddress
       
       const nftContract = new ethers.Contract(STONER_NFT_ADDRESS, StonerNFTABI, provider)
       const feePoolContract = new ethers.Contract(STONER_FEE_POOL_ADDRESS, StonerFeePoolABI, provider)
@@ -569,31 +513,14 @@ export default function StonerFeePoolActions() {
     }
   }
 
-  // Check wallet connection on mount
-  useEffect(() => {
-    const initWallet = async () => {
-      const connected = await checkWalletConnection()
-      if (connected) {
-        console.log('✅ Wallet already connected, fetching data...')
-        // Small delay to ensure state is set
-        setTimeout(() => {
-          fetchNFTs()
-          fetchRewards()
-        }, 100)
-      }
-    }
-    
-    initWallet()
-  }, [])
-
   // Fetch data when wallet connects
   useEffect(() => {
-    if (isWalletConnected && walletAddress) {
+    if (isWalletConnected && walletAddress && isCorrectNetwork) {
       console.log('🔗 Wallet connected, fetching NFTs and rewards...')
       fetchNFTs()
       fetchRewards()
     }
-  }, [isWalletConnected, walletAddress])
+  }, [isWalletConnected, walletAddress, isCorrectNetwork])
 
   // Handle stake
   const handleStake = async () => {
@@ -759,35 +686,25 @@ export default function StonerFeePoolActions() {
     setLoading(false)
   }
 
-  return (
-    <div className="p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-sm space-y-6">
-      {/* Wallet Connection Section */}
-      {!isWalletConnected ? (
+  // Show message if wallet not connected
+  if (!isWalletConnected) {
+    return (
+      <div className="p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-sm space-y-6">
         <div className="text-center py-8 space-y-4">
           <div className="w-16 h-16 mx-auto bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-2xl">🌿</span>
           </div>
           <div>
             <h3 className="font-bold text-xl text-green-400 mb-2">Stoner NFT Staking</h3>
-            <p className="text-muted mb-4">Connect your wallet to stake Stoner NFTs and earn rewards</p>
-            <button 
-              onClick={connectWallet}
-              disabled={connectingWallet}
-              className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 font-medium flex items-center gap-2 mx-auto"
-            >
-              {connectingWallet ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Connecting...
-                </>
-              ) : (
-                'Connect Wallet'
-              )}
-            </button>
+            <p className="text-muted mb-4">Connect your wallet using the button in the header to stake Stoner NFTs and earn rewards</p>
           </div>
         </div>
-      ) : (
-        <>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-sm space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
@@ -1027,8 +944,6 @@ export default function StonerFeePoolActions() {
           )}
         </div>
       </div>
-        </>
-      )}
     </div>
   )
 }
