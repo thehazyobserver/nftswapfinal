@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import PoolList from './components/PoolList';
-import SwapDiagnostics from './components/SwapDiagnostics';
 import StonerStaking from './pages/StonerStaking';
 
 export default function App() {
@@ -64,14 +63,7 @@ export default function App() {
           </header>
           <main>
             <Routes>
-              <Route path="/" element={
-                <>
-                  <SwapDiagnostics />
-                  <div className="mt-6">
-                    <PoolList />
-                  </div>
-                </>
-              } />
+              <Route path="/" element={<PoolList />} />
               <Route path="/staking" element={<StonerStaking />} />
             </Routes>
           </main>
