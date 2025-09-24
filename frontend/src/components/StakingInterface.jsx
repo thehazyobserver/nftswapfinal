@@ -19,7 +19,8 @@ export default function StakingInterface({
   approvingAll,
   nftCollection,
   swapPool,
-  provider
+  provider,
+  pendingRewards = '0'
 }) {
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
   const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
@@ -83,34 +84,62 @@ export default function StakingInterface({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-yellow-800 dark:text-yellow-200">
-                {stakedNFTs.length} NFT{stakedNFTs.length !== 1 ? 's' : ''}
+              <div className="text-3xl font-bold text-yellow-800 dark:text-yellow-200">
+                {parseFloat(pendingRewards).toFixed(4)} S
               </div>
               <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                Currently Staked
+                Pending Rewards
               </div>
             </div>
           </div>
           
-          <button
-            onClick={handleClaimRewards}
-            disabled={loading}
-            className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Claiming Rewards...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-                Claim All Rewards
-              </>
-            )}
-          </button>
+          <div className="bg-black/20 rounded-lg p-4 border border-yellow-600/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-yellow-500/20 rounded-full flex items-center justify-center">
+                  <span className="text-yellow-400 text-sm">💎</span>
+                </div>
+                <div>
+                  <div className="font-semibold text-yellow-200">Swap Fee Earnings</div>
+                  <div className="text-xs text-yellow-300/70">From your staked NFTs generating trading fees</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-yellow-200">
+                  {stakedNFTs.length} NFT{stakedNFTs.length !== 1 ? 's' : ''}
+                </div>
+                <div className="text-xs text-yellow-300/70">Currently Staked</div>
+              </div>
+            </div>
+            
+            <button
+              onClick={handleClaimRewards}
+              disabled={loading || parseFloat(pendingRewards) === 0}
+              className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Claiming Rewards...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                  {parseFloat(pendingRewards) > 0 ? `Claim ${parseFloat(pendingRewards).toFixed(4)} S` : 'No Rewards Available'}
+                </>
+              )}
+            </button>
+          </div>
+          
+          {parseFloat(pendingRewards) === 0 && stakedNFTs.length > 0 && (
+            <div className="text-center">
+              <div className="text-xs text-yellow-300/60 bg-yellow-900/30 px-3 py-2 rounded-lg border border-yellow-700/30">
+                💡 <strong>Tip:</strong> Rewards accumulate as users swap NFTs in this pool. Check back later!
+              </div>
+            </div>
+          )}
         </div>
       )}
 

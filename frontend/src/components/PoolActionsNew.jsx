@@ -22,6 +22,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   const [receiptLoading, setReceiptLoading] = useState(false)
   const [poolLoading, setPoolLoading] = useState(false)
   const [contractInfo, setContractInfo] = useState(null)
+  const [pendingRewards, setPendingRewards] = useState('0')
 
   // All the existing functions from PoolActions would be imported here
   // For brevity, I'll show the key ones
@@ -121,12 +122,49 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   const refreshNFTs = async () => {
     // Implementation would be same as original PoolActions
     console.log('Refreshing NFT data...')
+    // Fetch rewards when refreshing
+    await fetchPendingRewards()
+  }
+
+  const fetchPendingRewards = async () => {
+    if (!address || !stakeReceipt) {
+      setPendingRewards('0')
+      return
+    }
+    
+    try {
+      const signer = await getSigner()
+      const receiptContract = new ethers.Contract(stakeReceipt, StakeReceiptABI, signer)
+      
+      // Try to get pending rewards using earned() function
+      if (receiptContract.earned) {
+        const earned = await receiptContract.earned(address)
+        setPendingRewards(ethers.formatEther(earned))
+      } else {
+        // Fallback to direct pendingRewards mapping if earned() doesn't exist
+        const pending = await receiptContract.pendingRewards(address)
+        setPendingRewards(ethers.formatEther(pending))
+      }
+    } catch (error) {
+      console.warn('Failed to fetch pending rewards:', error)
+      setPendingRewards('0')
+    }
   }
 
   // Initialize data on mount
   useEffect(() => {
     refreshNFTs()
+    fetchPendingRewards()
   }, [swapPool, stakeReceipt])
+
+  // Fetch rewards periodically (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchPendingRewards()
+    }, 30000)
+    
+    return () => clearInterval(interval)
+  }, [address, stakeReceipt])
   
   if (activeInterface === 'swap') {
     return (
@@ -184,6 +222,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           nftCollection={nftCollection}
           swapPool={swapPool}
           provider={externalProvider}
+          pendingRewards={pendingRewards}
         />
       </div>
     )
