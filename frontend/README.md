@@ -1,11 +1,22 @@
-# NFT Swap Dashboard (Frontend)
+# NFT Swap & Staking Platform (Frontend)
 
-This is a Vite + React scaffold for interacting with the MultiPoolFactoryNonProxy and SwapPool contracts.
+A professional React application for swapping and staking NFTs, built with Vite and Tailwind CSS.
 
-Features:
-- Connect wallet via MetaMask
-- Load pools from `getAllPools()` and display basic information
-- Pool detail modal with links and copy-to-clipboard
+## Features
+
+### Core Functionality
+- **Separated Interfaces**: Dedicated swap and staking interfaces for better UX
+- **NFT Swapping**: Swap your NFTs for others in the pool with intuitive interface  
+- **NFT Staking**: Stake NFTs to earn rewards with approval handling
+- **Pool Management**: Browse and interact with multiple swap/staking pools
+- **Rewards System**: Claim accumulated staking rewards
+
+### Technical Features  
+- MetaMask wallet integration with Sonic Network support
+- Responsive design with Tailwind CSS and custom animations
+- Optimized production builds with code splitting
+- Real-time NFT loading with skeleton states
+- Professional UI with enhanced visual feedback
 
 Quick start
 
@@ -41,13 +52,39 @@ Environment variables on Netlify
 	- `VITE_FACTORY_ADDRESS` — The `MultiPoolFactoryNonProxy` address used by the UI
 	- `VITE_EXPLORER_BASE` — (optional) Explorer base URL, defaults to `https://explorer.sonic.org`
 
-Replace ABIs
+## Smart Contract Integration
 
-- For full functionality (swap, stake, claim), replace `src/abis/*.json` with the JSON ABIs produced by your Solidity build (Hardhat/Foundry/Truffle). The scaffold includes a minimal `MultiPoolFactoryNonProxy.json` with the functions needed for listing pools. When you add richer ABIs, update `PoolActions.jsx` to call the appropriate methods on `SwapPool` and `StonerFeePool`.
+The application includes pre-configured ABIs for all contract interactions:
 
-Adding compiled ABIs from Hardhat
+- `MultiPoolFactoryNonProxy.json` - Factory contract for pool management
+- `SwapPool.json` - Core swap pool functionality  
+- `StonerFeePool.json` - Staking and rewards system
+- `StakeReceipt.json` - Staking receipt tokens
+- `StonerNFT.json` - NFT collection interface
 
-1. Run your build (e.g., `npx hardhat compile`) — copy the artifact `artifacts/contracts/.../*.json` to `frontend/src/abis/`.
+### Updating ABIs
+
+To update with your deployed contracts:
+
+1. Build your contracts: `npx hardhat compile`
+2. Copy ABIs: `cp artifacts/contracts/YourContract.sol/YourContract.json frontend/src/abis/`
+3. Update contract addresses in `.env`
+
+## Production Deployment
+
+The application is production-ready with:
+
+- ✅ Optimized Vite build configuration
+- ✅ Code splitting for vendor libraries  
+- ✅ Minified assets without source maps
+- ✅ Professional UI without development tools
+- ✅ Enhanced error handling and loading states
+
+### Build Commands
+
+- `npm run build` - Production build
+- `npm run preview` - Preview production build locally
+- `npm run build:analyze` - Build with bundle analyzer
 2. Replace the placeholder JSON files and ensure exported ABI is an array of function/event definitions (not the full artifact object).
 
 Next Steps / Extending the UI
