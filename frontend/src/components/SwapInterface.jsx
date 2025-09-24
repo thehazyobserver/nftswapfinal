@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import NFTTokenImage from './NFTTokenImage'
 import NFTLoadingSkeleton from './NFTLoadingSkeleton'
+import { useToast } from './ToastProvider'
+import { useBlockchainTransaction } from './useTransactionState'
 
 export default function SwapInterface({ 
   walletNFTs, 
@@ -10,13 +12,36 @@ export default function SwapInterface({
   status 
 }) {
   const [selectedSwapTokens, setSelectedSwapTokens] = useState([])
+  const toast = useToast()
+  const { executeTransaction, isTransactionPending } = useBlockchainTransaction()
 
-  const handleSwap = () => {
-    if (selectedSwapTokens.length > 0) {
-      onSwap(selectedSwapTokens)
-      setSelectedSwapTokens([]) // Clear selection after swap
+  const handleSwap = async () => {
+    if (selectedSwapTokens.length === 0) {
+      toast.error('Please select NFTs to swap')
+      return
+    }
+
+    try {
+      await executeTransaction(
+        'swap',
+        () => onSwap(selectedSwapTokens),
+        {
+          pendingMessage: `Swapping ${selectedSwapTokens.length} NFT${selectedSwapTokens.length > 1 ? 's' : ''}...`,
+          successMessage: `Successfully swapped ${selectedSwapTokens.length} NFT${selectedSwapTokens.length > 1 ? 's' : ''}!`,
+          onSuccess: () => {
+            setSelectedSwapTokens([]) // Clear selection after successful swap
+          },
+          onError: (error) => {
+            console.error('Swap failed:', error)
+          }
+        }
+      )
+    } catch (error) {
+      // Error is already handled by executeTransaction
     }
   }
+
+  const isSwapping = isTransactionPending('swap')
 
   return (
     <div className="space-y-6">
@@ -165,16 +190,18 @@ export default function SwapInterface({
           className={`flex-1 px-6 py-4 text-white rounded-xl shadow-lg font-semibold text-lg tracking-wide transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 ${
             poolNFTs.length === 0 
               ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
+              : isSwapping 
+              ? 'bg-gradient-to-r from-blue-400 to-indigo-400 animate-pulse-glow' 
               : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl hover:scale-105'
           }`}
           onClick={handleSwap} 
-          disabled={loading || selectedSwapTokens.length === 0 || poolNFTs.length === 0}
+          disabled={isSwapping || selectedSwapTokens.length === 0 || poolNFTs.length === 0}
           title={poolNFTs.length === 0 ? 'Pool is empty - stake NFTs first to enable swapping' : ''}
         >
-          {loading ? (
+          {isSwapping ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Swapping...
+              <span className="loading-dots">Swapping</span>
             </>
           ) : poolNFTs.length === 0 ? (
             <>
@@ -193,11 +220,10 @@ export default function SwapInterface({
           )}
         </button>
         
-        {selectedSwapTokens.length > 0 && (
+        {selectedSwapTokens.length > 0 && !isSwapping && (
           <button 
             className="px-4 py-4 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl shadow hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center gap-2" 
             onClick={() => setSelectedSwapTokens([])}
-            disabled={loading}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

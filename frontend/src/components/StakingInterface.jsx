@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import NFTTokenImage from './NFTTokenImage'
 import NFTLoadingSkeleton from './NFTLoadingSkeleton'
 import ApproveNFTButton from './ApproveNFTButton'
+import { useToast } from './ToastProvider'
+import { useBlockchainTransaction } from './useTransactionState'
 
 export default function StakingInterface({ 
   walletNFTs, 
@@ -24,26 +26,80 @@ export default function StakingInterface({
 }) {
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
   const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
+  const toast = useToast()
+  const { executeTransaction, isTransactionPending } = useBlockchainTransaction()
 
-  const handleStake = () => {
-    if (selectedWalletTokens.length > 0) {
-      onStake(selectedWalletTokens)
-      setSelectedWalletTokens([]) // Clear selection after stake
+  const handleStake = async () => {
+    if (selectedWalletTokens.length === 0) {
+      toast.error('Please select NFTs to stake')
+      return
+    }
+
+    try {
+      await executeTransaction(
+        'stake',
+        () => onStake(selectedWalletTokens),
+        {
+          pendingMessage: `Staking ${selectedWalletTokens.length} NFT${selectedWalletTokens.length > 1 ? 's' : ''}...`,
+          successMessage: `Successfully staked ${selectedWalletTokens.length} NFT${selectedWalletTokens.length > 1 ? 's' : ''}!`,
+          onSuccess: () => {
+            setSelectedWalletTokens([]) // Clear selection after successful stake
+          }
+        }
+      )
+    } catch (error) {
+      // Error is already handled by executeTransaction
     }
   }
 
-  const handleUnstake = () => {
-    if (selectedReceiptTokens.length > 0) {
-      onUnstake(selectedReceiptTokens)
-      setSelectedReceiptTokens([]) // Clear selection after unstake
+  const handleUnstake = async () => {
+    if (selectedReceiptTokens.length === 0) {
+      toast.error('Please select staked NFTs to unstake')
+      return
+    }
+
+    try {
+      await executeTransaction(
+        'unstake',
+        () => onUnstake(selectedReceiptTokens),
+        {
+          pendingMessage: `Unstaking ${selectedReceiptTokens.length} NFT${selectedReceiptTokens.length > 1 ? 's' : ''}...`,
+          successMessage: `Successfully unstaked ${selectedReceiptTokens.length} NFT${selectedReceiptTokens.length > 1 ? 's' : ''}!`,
+          onSuccess: () => {
+            setSelectedReceiptTokens([]) // Clear selection after successful unstake
+          }
+        }
+      )
+    } catch (error) {
+      // Error is already handled by executeTransaction
     }
   }
 
-  const handleClaimRewards = () => {
-    onClaimRewards()
+  const handleClaimRewards = async () => {
+    if (pendingRewards === '0' || pendingRewards === '0.0') {
+      toast.info('No rewards to claim at the moment')
+      return
+    }
+
+    try {
+      await executeTransaction(
+        'claim',
+        () => onClaimRewards(),
+        {
+          pendingMessage: 'Claiming rewards...',
+          successMessage: `Successfully claimed ${pendingRewards} S tokens!`,
+        }
+      )
+    } catch (error) {
+      // Error is already handled by executeTransaction
+    }
   }
 
   const allSelected = selectedWalletTokens.length > 0 && selectedWalletTokens.every(tokenId => approvedMap[tokenId] || isApprovedForAll)
+  
+  const isStaking = isTransactionPending('stake')
+  const isUnstaking = isTransactionPending('unstake')
+  const isClaiming = isTransactionPending('claim')
 
   return (
     <div className="space-y-6">
@@ -114,13 +170,17 @@ export default function StakingInterface({
             
             <button
               onClick={handleClaimRewards}
-              disabled={loading || parseFloat(pendingRewards) === 0}
-              className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={isClaiming || parseFloat(pendingRewards) === 0}
+              className={`w-full px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                isClaiming 
+                  ? 'bg-gradient-to-r from-yellow-400 to-amber-400 animate-pulse-glow' 
+                  : 'bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600'
+              }`}
             >
-              {loading ? (
+              {isClaiming ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Claiming Rewards...
+                  <span className="loading-dots">Claiming</span>
                 </>
               ) : (
                 <>
@@ -348,15 +408,17 @@ export default function StakingInterface({
             className={`w-full px-6 py-4 text-white rounded-xl shadow-lg font-semibold text-lg tracking-wide transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 ${
               selectedWalletTokens.length === 0 || !allSelected
                 ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
+                : isStaking 
+                ? 'bg-gradient-to-r from-green-400 to-emerald-400 animate-pulse-glow' 
                 : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 hover:shadow-xl hover:scale-105'
             }`}
             onClick={handleStake} 
-            disabled={loading || selectedWalletTokens.length === 0 || !allSelected}
+            disabled={isStaking || selectedWalletTokens.length === 0 || !allSelected}
           >
-            {loading ? (
+            {isStaking ? (
               <>
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Staking...
+                <span className="loading-dots">Staking</span>
               </>
             ) : (
               <>
@@ -387,15 +449,17 @@ export default function StakingInterface({
             className={`w-full px-6 py-4 text-white rounded-xl shadow-lg font-semibold text-lg tracking-wide transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 ${
               selectedReceiptTokens.length === 0
                 ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
+                : isUnstaking 
+                ? 'bg-gradient-to-r from-red-400 to-pink-400 animate-pulse-glow' 
                 : 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 hover:shadow-xl hover:scale-105'
             }`}
             onClick={handleUnstake} 
-            disabled={loading || selectedReceiptTokens.length === 0}
+            disabled={isUnstaking || selectedReceiptTokens.length === 0}
           >
-            {loading ? (
+            {isUnstaking ? (
               <>
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Unstaking...
+                <span className="loading-dots">Unstaking</span>
               </>
             ) : (
               <>
