@@ -207,22 +207,45 @@ export default function SwapDiagnostics() {
   }
 
   return (
-    <div className="p-6 bg-red-100 dark:bg-red-900/20 rounded-xl border border-red-300 dark:border-red-700 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-red-700 dark:text-red-300 text-lg">🔍 Swap Diagnostics</h3>
-        <div className="flex gap-2">
+    <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl border border-amber-200 dark:border-amber-700 space-y-4 shadow-lg">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md">
+            <span className="text-white font-bold text-lg">🔍</span>
+          </div>
+          <div>
+            <h3 className="font-bold text-amber-800 dark:text-amber-200 text-lg">System Diagnostics</h3>
+            <p className="text-sm text-amber-600 dark:text-amber-400">Check swap pool configuration and health</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={runDiagnostics}
             disabled={loading}
-            className="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50 hover:bg-red-700 transition-colors"
+            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl flex items-center gap-2"
           >
-            {loading ? 'Checking...' : 'Run Diagnostics'}
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Checking...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Run Diagnostics
+              </>
+            )}
           </button>
           <button
             onClick={analyzeERC20Rewards}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+            className="px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white rounded-xl transition-all duration-200 font-medium shadow-lg hover:shadow-xl flex items-center gap-2"
           >
-            Analyze ERC20 Rewards
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Analyze ERC20
           </button>
           {results && typeof results === 'object' && results.stonerFeePool?.canReceiveRewards && (
             <button

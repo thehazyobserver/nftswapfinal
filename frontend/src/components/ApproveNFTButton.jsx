@@ -45,14 +45,37 @@ export default function ApproveNFTButton({ nftAddress, tokenId, spender, provide
   }
 
   if (!tokenId) return null
-  if (approved) return <span className="text-green-400 font-semibold text-xs ml-2">Approved</span>
+  
+  if (approved) {
+    return (
+      <div className="flex items-center gap-1 ml-2 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-xs font-medium border border-green-200 dark:border-green-700">
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+        Approved
+      </div>
+    )
+  }
+  
   return (
     <button
-      className="ml-2 px-2 py-1 bg-blue-600 text-white rounded text-xs font-semibold disabled:opacity-50"
+      className="ml-2 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white rounded-lg text-xs font-medium shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
       onClick={handleApprove}
       disabled={approving || disabled}
     >
-      {approving ? 'Approving...' : 'Approve'}
+      {approving ? (
+        <>
+          <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+          Approving...
+        </>
+      ) : (
+        <>
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          Approve
+        </>
+      )}
     </button>
   )
 }
