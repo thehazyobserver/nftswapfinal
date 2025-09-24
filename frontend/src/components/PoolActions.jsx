@@ -860,70 +860,155 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
         </div>
       )}
       <div className="space-y-6">
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-green-400">Stake NFT(s)</div>
-            <div className="flex items-center gap-2">
-              <div className={`text-xs px-2 py-1 rounded ${selectedWalletTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedWalletTokens.length > 0 ? 'bg-green-900/30 text-green-300' : 'bg-gray-800/30 text-gray-400'}`}>
+        {/* Enhanced Staking Section */}
+        <div className="bg-gradient-to-br from-emerald-500/10 to-green-600/10 rounded-xl border border-emerald-500/20 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center">
+                <span className="text-white text-xl">🏦</span>
+              </div>
+              <div>
+                <h4 className="font-bold text-emerald-400 text-lg">Stake NFTs</h4>
+                <p className="text-sm text-emerald-300/80">Add your NFTs to the pool to enable swapping</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`text-xs px-3 py-2 rounded-full font-medium transition-colors ${
+                selectedWalletTokens.length > 8 
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                  : selectedWalletTokens.length > 0 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                    : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+              }`}>
                 📊 {selectedWalletTokens.length}/10 selected
               </div>
-              <div className="text-xs text-green-300 bg-green-900/30 px-2 py-1 rounded">
-                📦 Max 10 NFTs per batch
+              <div className="text-xs text-emerald-300/70 bg-emerald-900/30 px-3 py-2 rounded-full border border-emerald-700/30">
+                📦 Max 10 per batch
               </div>
             </div>
           </div>
-          <div className="flex gap-3 flex-wrap">
-            {walletLoading ? (
-              <NFTLoadingSkeleton count={6} size={56} />
-            ) : walletNFTs.length === 0 ? (
-              <div className="text-muted italic">No NFTs in wallet</div>
-            ) : (
-              walletNFTs.map(nft => (
-                <div key={nft.tokenId} className="flex flex-col items-center">
-                  <button className={`border-2 rounded-xl p-1 bg-gradient-to-br from-green-900/20 to-card shadow-sm transition-all ${selectedWalletTokens.includes(nft.tokenId) ? 'border-green-400 scale-105' : 'border-gray-700 hover:border-green-400'} text-text`} onClick={() => setSelectedWalletTokens(tokens => tokens.includes(nft.tokenId) ? tokens.filter(t => t !== nft.tokenId) : [...tokens, nft.tokenId])} disabled={loading}>
-                    <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={56} />
-                    <div className="text-xs text-center text-text font-mono">#{nft.tokenId}</div>
-                  </button>
-                {swapPool && !isApprovedForAll && (
-                  <ApproveNFTButton
-                    nftAddress={nftCollection}
-                    tokenId={nft.tokenId}
-                    spender={swapPool}
-                    provider={externalProvider}
-                    disabled={loading || approvedMap[nft.tokenId]}
-                    onApproved={() => setApprovedMap(m => ({ ...m, [nft.tokenId]: true }))}
-                  />
-                )}
+
+          {walletLoading ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+              <NFTLoadingSkeleton count={8} size={64} />
+            </div>
+          ) : walletNFTs.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 mx-auto bg-gray-500/20 rounded-lg flex items-center justify-center mb-3">
+                <span className="text-gray-400 text-2xl">🔍</span>
               </div>
-              ))
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-3">
-            <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-teal-400 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleStake} disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid] || isApprovedForAll)}>Stake Selected</button>
+              <div className="text-gray-400 font-medium">No NFTs found in wallet</div>
+              <div className="text-sm text-gray-500 mt-1">Make sure you own NFTs from this collection</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+              {walletNFTs.map(nft => (
+                <div key={nft.tokenId} className="flex flex-col items-center space-y-2">
+                  <button 
+                    className={`relative border-2 rounded-xl p-2 bg-gradient-to-br transition-all duration-200 group ${
+                      selectedWalletTokens.includes(nft.tokenId) 
+                        ? 'border-emerald-400 scale-105 shadow-lg shadow-emerald-500/25 from-emerald-900/30 to-emerald-800/30' 
+                        : 'border-gray-600 hover:border-emerald-400 hover:scale-102 from-gray-900/20 to-gray-800/20'
+                    }`} 
+                    onClick={() => setSelectedWalletTokens(tokens => 
+                      tokens.includes(nft.tokenId) 
+                        ? tokens.filter(t => t !== nft.tokenId) 
+                        : tokens.length < 10 
+                          ? [...tokens, nft.tokenId]
+                          : tokens
+                    )} 
+                    disabled={loading}
+                  >
+                    <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={64} />
+                    <div className="text-xs text-center font-mono mt-1 text-gray-300">#{nft.tokenId}</div>
+                    {selectedWalletTokens.includes(nft.tokenId) && (
+                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </button>
+                  {swapPool && !isApprovedForAll && (
+                    <ApproveNFTButton
+                      nftAddress={nftCollection}
+                      tokenId={nft.tokenId}
+                      spender={swapPool}
+                      provider={externalProvider}
+                      disabled={loading || approvedMap[nft.tokenId]}
+                      onApproved={() => setApprovedMap(m => ({ ...m, [nft.tokenId]: true }))}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-emerald-500/20">
+            <button 
+              className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-lg shadow-lg font-semibold tracking-wide disabled:opacity-50 hover:from-emerald-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-2" 
+              onClick={handleStake} 
+              disabled={loading || selectedWalletTokens.length === 0 || !selectedWalletTokens.every(tid => approvedMap[tid] || isApprovedForAll)}
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Staking...
+                </>
+              ) : (
+                <>
+                  <span>🏦</span>
+                  Stake Selected ({selectedWalletTokens.length})
+                </>
+              )}
+            </button>
+            
             {swapPool && !isApprovedForAll && (
-              <button className="px-3 py-2 bg-blue-600 text-white rounded shadow text-xs font-semibold disabled:opacity-50" disabled={approvingAll || loading} onClick={async () => {
-                setApprovingAll(true)
-                try {
-                  if (!window.ethereum) throw new Error('Wallet not found')
-                  const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner()
-                  const nft = new ethers.Contract(nftCollection, ["function setApprovalForAll(address,bool) external"], signer)
-                  const tx = await nft.setApprovalForAll(swapPool, true)
-                  await tx.wait()
-                  setIsApprovedForAll(true)
-                  setApprovedMap(m => {
-                    const all = { ...m }
-                    walletNFTs.forEach(nft => { all[nft.tokenId] = true })
-                    return all
-                  })
-                } catch (e) {
-                  alert(e.reason || e.message)
-                }
-                setApprovingAll(false)
-              }}>
-                {approvingAll ? 'Approving All...' : 'Approve All'}
+              <button 
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors flex items-center gap-2" 
+                disabled={approvingAll || loading} 
+                onClick={async () => {
+                  setApprovingAll(true)
+                  try {
+                    if (!window.ethereum) throw new Error('Wallet not found')
+                    const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner()
+                    const nft = new ethers.Contract(nftCollection, ["function setApprovalForAll(address,bool) external"], signer)
+                    const tx = await nft.setApprovalForAll(swapPool, true)
+                    await tx.wait()
+                    setIsApprovedForAll(true)
+                    setApprovedMap(m => {
+                      const all = { ...m }
+                      walletNFTs.forEach(nft => { all[nft.tokenId] = true })
+                      return all
+                    })
+                  } catch (e) {
+                    alert(e.reason || e.message)
+                  }
+                  setApprovingAll(false)
+                }}
+              >
+                {approvingAll ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Approving...
+                  </>
+                ) : (
+                  <>
+                    <span>✅</span>
+                    Approve All
+                  </>
+                )}
               </button>
             )}
-            {isApprovedForAll && <span className="text-green-400 font-semibold text-xs ml-2">All Approved</span>}
+            
+            {isApprovedForAll && (
+              <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                All Approved
+              </div>
+            )}
           </div>
         </div>
         <div>
@@ -949,9 +1034,60 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
           </div>
           <button className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-400 text-white rounded-lg shadow mt-3 font-semibold tracking-wide disabled:opacity-50" onClick={handleUnstake} disabled={loading || selectedReceiptTokens.length === 0}>Unstake Selected</button>
         </div>
-        <div>
-          <div className="font-semibold mb-2 text-yellow-400">Claim Rewards</div>
-          <button className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-lg shadow font-semibold tracking-wide disabled:opacity-50" onClick={handleClaim} disabled={loading}>Claim</button>
+        {/* Enhanced Rewards Section */}
+        <div className="bg-gradient-to-br from-amber-500/10 to-yellow-600/10 rounded-xl border border-amber-500/20 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-yellow-600 rounded-lg flex items-center justify-center">
+                <span className="text-white text-xl">💰</span>
+              </div>
+              <div>
+                <h4 className="font-bold text-amber-400 text-lg">Claimable Rewards</h4>
+                <p className="text-sm text-amber-300/80">Earn from swap fees when others use the pool</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-amber-300/60 uppercase tracking-wider font-medium">Available Now</div>
+              <div className="text-sm font-mono text-amber-200">Ready to claim</div>
+            </div>
+          </div>
+          
+          <div className="bg-black/20 rounded-lg p-4 border border-amber-600/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-amber-500/20 rounded-full flex items-center justify-center">
+                  <span className="text-amber-400 text-sm">⚡</span>
+                </div>
+                <div>
+                  <div className="font-semibold text-amber-200">Swap Fee Rewards</div>
+                  <div className="text-xs text-amber-300/70">From your staked NFTs in this pool</div>
+                </div>
+              </div>
+              <button 
+                className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-600 text-white rounded-lg shadow-lg font-semibold tracking-wide disabled:opacity-50 hover:from-amber-600 hover:to-yellow-700 transition-all duration-200 flex items-center gap-2" 
+                onClick={handleClaim} 
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Claiming...
+                  </>
+                ) : (
+                  <>
+                    <span>💎</span>
+                    Claim Rewards
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          
+          <div className="text-center">
+            <div className="text-xs text-amber-300/60">
+              💡 <strong>Tip:</strong> More staked NFTs = higher share of swap fees
+            </div>
+          </div>
         </div>
         <div>
           <div className="font-semibold mb-2 text-purple-400">Pool NFTs Available for Swap</div>
@@ -995,17 +1131,30 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-indigo-400">Swap Your NFT(s)</div>
-            <div className="flex items-center gap-2">
-              <div className={`text-xs px-2 py-1 rounded ${selectedSwapTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300' : selectedSwapTokens.length > 0 ? 'bg-indigo-900/30 text-indigo-300' : 'bg-gray-800/30 text-gray-400'}`}>
-                📊 {selectedSwapTokens.length}/10 selected
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 1H4m0 0l4 4M4 12l4-4" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold bg-gradient-to-r from-indigo-400 to-blue-400 bg-clip-text text-transparent">
+                    Swap Your NFTs
+                  </h3>
+                  <p className="text-sm text-gray-400">Exchange your NFTs with those in the pool</p>
+                </div>
               </div>
-              <div className="text-xs text-indigo-300 bg-indigo-900/30 px-2 py-1 rounded">
-                📦 Max 10 NFTs per batch
+              <div className="flex items-center gap-2">
+                <div className={`text-xs px-3 py-1.5 rounded-full font-medium ${selectedSwapTokens.length > 8 ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700' : selectedSwapTokens.length > 0 ? 'bg-indigo-900/30 text-indigo-300 border border-indigo-700' : 'bg-gray-800/30 text-gray-400 border border-gray-700'}`}>
+                  📊 {selectedSwapTokens.length}/10 selected
+                </div>
+                <div className="text-xs text-indigo-300 bg-indigo-900/30 px-3 py-1.5 rounded-full border border-indigo-700 font-medium">
+                  📦 Max 10 NFTs per batch
+                </div>
               </div>
             </div>
-          </div>
           <div className="flex gap-3 flex-wrap">
             {walletNFTs.length === 0 && <div className="text-muted italic">No NFTs in wallet</div>}
             {walletNFTs.map(nft => (
@@ -1067,8 +1216,51 @@ export default function PoolActions({ swapPool, stakeReceipt, provider: external
             )}
           </div>
         </div>
-  {status && <div className="mt-4 text-base text-accent font-semibold animate-pulse">{status}</div>}
+      {status && (
+        <div className={`mt-4 p-4 rounded-xl border transition-all duration-300 ${
+          status.includes('successful') || status.includes('claimed') || status.includes('Stake successful') || status.includes('Unstake successful') || status.includes('Rewards claimed')
+            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+            : status.includes('failed') || status.includes('error') || status.includes('❌') || status.includes('Cannot')
+            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
+            : status.includes('Staking...') || status.includes('Unstaking...') || status.includes('Claiming') || status.includes('Swapping')
+            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200'
+            : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">
+              {status.includes('successful') || status.includes('claimed') || status.includes('Stake successful') || status.includes('Unstake successful') || status.includes('Rewards claimed') ? (
+                <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              ) : status.includes('failed') || status.includes('error') || status.includes('❌') || status.includes('Cannot') ? (
+                <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              ) : status.includes('Staking...') || status.includes('Unstaking...') || status.includes('Claiming') || status.includes('Swapping') ? (
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <div className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="font-medium text-sm leading-5">{status}</div>
+              {(status.includes('Staking...') || status.includes('Unstaking...') || status.includes('Claiming') || status.includes('Swapping')) && (
+                <div className="text-xs opacity-75 mt-1">This may take a few moments to complete...</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       </div>
+    </div>
     </div>
   )
 }
