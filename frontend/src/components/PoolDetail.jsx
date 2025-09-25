@@ -29,8 +29,8 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
         </div>
 
         <div className="mt-6 flex gap-2">
-          <a className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded shadow transition" href={`${import.meta.env.VITE_EXPLORER_BASE || 'https://explorer.sonic.org'}/address/${pool.swapPool}`} target="_blank" rel="noreferrer">Explorer</a>
-          <button className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>Copy Address</button>
+          <a className="px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded shadow transition" href={`${import.meta.env.VITE_EXPLORER_BASE || 'https://explorer.sonic.org'}/address/${pool.swapPool}`} target="_blank" rel="noreferrer">Explorer</a>
+          <button className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>Copy Address</button>
         </div>
 
   <PoolActionsNew swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} provider={provider} />
