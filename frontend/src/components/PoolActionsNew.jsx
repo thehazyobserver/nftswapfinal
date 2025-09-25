@@ -75,12 +75,33 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       // Check ownership and approval for all selected tokens
       const userAddr = await signer.getAddress()
       
-      // Check if user owns all tokens
-      setStatus('Verifying ownership...')
+      // Check if user owns all tokens and validate they exist
+      setStatus('Verifying ownership and token validity...')
       for (const tokenId of selectedTokens) {
-        const owner = await nftContract.ownerOf(tokenId)
-        if (owner.toLowerCase() !== userAddr.toLowerCase()) {
-          setStatus(`❌ You don't own NFT #${tokenId}`)
+        try {
+          // First check if token exists by trying to get its owner
+          const owner = await nftContract.ownerOf(tokenId)
+          if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+            setStatus(`❌ You don't own NFT #${tokenId}`)
+            setLoading(false)
+            return
+          }
+
+          // Check if token is already in the pool (this would cause SameTokenSwap error)
+          const poolTokens = await contract.getPoolTokens()
+          const poolTokenStrings = poolTokens.map(id => id.toString())
+          if (poolTokenStrings.includes(tokenId.toString())) {
+            setStatus(`❌ NFT #${tokenId} is already in the pool and cannot be swapped`)
+            setLoading(false)
+            return
+          }
+        } catch (ownerError) {
+          if (ownerError.reason?.includes('ERC721: invalid token ID') || 
+              ownerError.reason?.includes('ERC721: owner query for nonexistent token')) {
+            setStatus(`❌ NFT #${tokenId} does not exist`)
+          } else {
+            setStatus(`❌ Failed to verify NFT #${tokenId}: ${ownerError.message}`)
+          }
           setLoading(false)
           return
         }
@@ -202,11 +223,22 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       // Check ownership for all selected tokens
       const userAddr = await signer.getAddress()
       
-      setStatus('Verifying ownership...')
+      setStatus('Verifying ownership and token validity...')
       for (const tokenId of selectedTokens) {
-        const owner = await nftContract.ownerOf(tokenId)
-        if (owner.toLowerCase() !== userAddr.toLowerCase()) {
-          setStatus(`❌ You don't own NFT #${tokenId}`)
+        try {
+          const owner = await nftContract.ownerOf(tokenId)
+          if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+            setStatus(`❌ You don't own NFT #${tokenId}`)
+            setLoading(false)
+            return
+          }
+        } catch (ownerError) {
+          if (ownerError.reason?.includes('ERC721: invalid token ID') || 
+              ownerError.reason?.includes('ERC721: owner query for nonexistent token')) {
+            setStatus(`❌ NFT #${tokenId} does not exist`)
+          } else {
+            setStatus(`❌ Failed to verify NFT #${tokenId}: ${ownerError.message}`)
+          }
           setLoading(false)
           return
         }
@@ -774,26 +806,31 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   }
 
   const fetchPendingRewards = async () => {
-    if (!account || !stakeReceipt || !isConnected) {
+    if (!account || !swapPool || !isConnected) {
       setPendingRewards('0')
       return
     }
     
     try {
       const signer = await getSigner()
-      const receiptContract = new ethers.Contract(stakeReceipt, StakeReceiptABI, signer)
+      const poolContract = new ethers.Contract(swapPool, SwapPoolABI, signer)
       
-      // Try to get pending rewards using earned() function
-      if (receiptContract.earned) {
-        const earned = await receiptContract.earned(account)
+      // Try to get pending rewards using earned() function first
+      try {
+        const earned = await poolContract.earned(account)
         setPendingRewards(ethers.formatEther(earned))
-      } else {
-        // Fallback to direct pendingRewards mapping if earned() doesn't exist
-        const pending = await receiptContract.pendingRewards(account)
-        setPendingRewards(ethers.formatEther(pending))
+      } catch (earnedError) {
+        // Fallback to direct pendingRewards mapping access
+        try {
+          const pending = await poolContract.pendingRewards(account)
+          setPendingRewards(ethers.formatEther(pending))
+        } catch (pendingError) {
+          console.warn('Both earned() and pendingRewards failed:', { earnedError, pendingError })
+          setPendingRewards('0')
+        }
       }
     } catch (error) {
-      console.warn('Failed to fetch pending rewards:', error)
+      console.error('Failed to fetch pending rewards:', error)
       setPendingRewards('0')
     }
   }
