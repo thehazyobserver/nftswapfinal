@@ -16,11 +16,12 @@ async function fetchCollectionName(address, provider) {
 }
 
 export default function PoolList() {
-  const { address, provider, signer, isConnected, isCorrectNetwork } = useWallet()
+  const { address, provider: walletProvider, signer, isConnected, isCorrectNetwork } = useWallet()
   const [pools, setPools] = useState([])
   const [poolNames, setPoolNames] = useState({})
   const [loading, setLoading] = useState(false)
   const [selectedPool, setSelectedPool] = useState(null)
+  const [provider, setProvider] = useState(null)
   const [providerError, setProviderError] = useState('')
   const [providerLoading, setProviderLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
