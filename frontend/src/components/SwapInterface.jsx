@@ -142,6 +142,77 @@ export default function SwapInterface({
         </div>
       </div>
 
+      {/* Action Buttons - Positioned between Your NFTs and Pool NFTs */}
+      <div className="bg-white/95 dark:bg-gray-800/95 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+        {/* Total Fee Display - Compact inline version */}
+        {selectedSwapTokens.length > 0 && swapFee && (
+          <div className="flex items-center justify-between mb-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+              </svg>
+              <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Total Cost: {(parseFloat(swapFee) * selectedSwapTokens.length).toFixed(2)} S
+              </span>
+            </div>
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              {selectedSwapTokens.length} × {parseFloat(swapFee).toFixed(2)} S
+            </span>
+          </div>
+        )}
+        
+        <div className="flex items-center gap-3">
+          <button 
+            className={`flex-1 px-6 py-4 text-white rounded-xl shadow-lg font-semibold text-lg tracking-wide transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 ${
+              poolNFTs.length === 0 
+                ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
+                : isSwapping 
+                ? 'bg-gradient-to-r from-blue-400 to-indigo-400 animate-pulse-glow' 
+                : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl hover:scale-105'
+            }`}
+            onClick={handleSwap} 
+            disabled={isSwapping || selectedSwapTokens.length === 0 || poolNFTs.length === 0}
+            title={poolNFTs.length === 0 ? 'Pool is empty - stake NFTs first to enable swapping' : ''}
+          >
+            {isSwapping ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span className="loading-dots">Swapping</span>
+              </>
+            ) : poolNFTs.length === 0 ? (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                Pool Empty - Stake NFTs First
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 1H4m0 0l4 4M4 12l4-4" />
+                </svg>
+                {swapFee ? 
+                  `Swap ${selectedSwapTokens.length} NFT${selectedSwapTokens.length > 1 ? 's' : ''} (${(parseFloat(swapFee) * selectedSwapTokens.length).toFixed(2)} S)` :
+                  `Swap Selected NFTs (${selectedSwapTokens.length})`
+                }
+              </>
+            )}
+          </button>
+          
+          {selectedSwapTokens.length > 0 && !isSwapping && (
+            <button 
+              className="px-4 py-4 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl shadow hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center gap-2" 
+              onClick={() => setSelectedSwapTokens([])}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Pool NFTs Section */}
       <div className="space-y-3">
         <div className="flex items-center gap-3">
@@ -180,77 +251,6 @@ export default function SwapInterface({
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Action Buttons - Made sticky and more prominent */}
-      <div className="sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-4 -mx-6 mt-6">
-        {/* Total Fee Display - Compact inline version */}
-        {selectedSwapTokens.length > 0 && swapFee && (
-          <div className="flex items-center justify-between mb-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-              </svg>
-              <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Total Cost: {(parseFloat(swapFee) * selectedSwapTokens.length).toFixed(2)} S
-              </span>
-            </div>
-            <span className="text-xs text-amber-600 dark:text-amber-400">
-              {selectedSwapTokens.length} × {parseFloat(swapFee).toFixed(2)} S
-            </span>
-          </div>
-        )}
-        
-        <div className="flex items-center gap-3">
-          <button 
-          className={`flex-1 px-6 py-4 text-white rounded-xl shadow-lg font-semibold text-lg tracking-wide transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 ${
-            poolNFTs.length === 0 
-              ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed' 
-              : isSwapping 
-              ? 'bg-gradient-to-r from-blue-400 to-indigo-400 animate-pulse-glow' 
-              : 'bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl hover:scale-105'
-          }`}
-          onClick={handleSwap} 
-          disabled={isSwapping || selectedSwapTokens.length === 0 || poolNFTs.length === 0}
-          title={poolNFTs.length === 0 ? 'Pool is empty - stake NFTs first to enable swapping' : ''}
-        >
-          {isSwapping ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span className="loading-dots">Swapping</span>
-            </>
-          ) : poolNFTs.length === 0 ? (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              Pool Empty - Stake NFTs First
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 1H4m0 0l4 4M4 12l4-4" />
-              </svg>
-              {swapFee ? 
-                `Swap ${selectedSwapTokens.length} NFT${selectedSwapTokens.length > 1 ? 's' : ''} (${(parseFloat(swapFee) * selectedSwapTokens.length).toFixed(2)} S)` :
-                `Swap Selected NFTs (${selectedSwapTokens.length})`
-              }
-            </>
-          )}
-        </button>
-        
-        {selectedSwapTokens.length > 0 && !isSwapping && (
-          <button 
-            className="px-4 py-4 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl shadow hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center gap-2" 
-            onClick={() => setSelectedSwapTokens([])}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            Clear
-          </button>
-        )}
         </div>
       </div>
 
