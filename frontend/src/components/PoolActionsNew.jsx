@@ -24,6 +24,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   const [poolLoading, setPoolLoading] = useState(false)
   const [contractInfo, setContractInfo] = useState(null)
   const [pendingRewards, setPendingRewards] = useState('0')
+  const [swapFee, setSwapFee] = useState(null)
 
   // All the existing functions from PoolActions would be imported here
   // For brevity, I'll show the key ones
@@ -563,11 +564,27 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     }
   }
 
+  const fetchSwapFee = async () => {
+    if (!swapPool) return
+    
+    try {
+      const provider = externalProvider || new ethers.JsonRpcProvider(import.meta.env.VITE_RPC_URL || 'https://rpc.sonic.org')
+      const contract = new ethers.Contract(swapPool, SwapPoolABI, provider)
+      const feeInWei = await contract.swapFeeInWei()
+      const feeInEther = ethers.formatEther(feeInWei)
+      setSwapFee(feeInEther)
+    } catch (error) {
+      console.log('Error fetching swap fee:', error)
+      setSwapFee(null)
+    }
+  }
+
   // Initialize data on mount
   useEffect(() => {
     if (swapPool) {
       refreshNFTs()
       fetchPendingRewards()
+      fetchSwapFee()
     }
   }, [swapPool, stakeReceipt])
 
@@ -616,6 +633,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           loading={loading || walletLoading || poolLoading}
           onSwap={handleSwap}
           status={status}
+          swapFee={swapFee}
         />
       </div>
     )
