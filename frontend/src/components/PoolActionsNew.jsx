@@ -4,8 +4,10 @@ import SwapPoolABI from '../abis/SwapPool.json'
 import StakeReceiptABI from '../abis/StakeReceipt.json'
 import SwapInterface from './SwapInterface'
 import StakingInterface from './StakingInterface'
+import { useWallet } from './WalletProvider'
 
 export default function PoolActionsNew({ swapPool, stakeReceipt, provider: externalProvider }) {
+  const { account, isConnected } = useWallet()
   const [activeInterface, setActiveInterface] = useState(null) // null, 'swap', 'stake'
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,7 +19,6 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   const [stakedNFTs, setStakedNFTs] = useState([])
   const [receiptNFTs, setReceiptNFTs] = useState([])
   const [poolNFTs, setPoolNFTs] = useState([])
-  const [address, setAddress] = useState(null)
   const [walletLoading, setWalletLoading] = useState(false)
   const [receiptLoading, setReceiptLoading] = useState(false)
   const [poolLoading, setPoolLoading] = useState(false)
@@ -120,7 +121,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
 
   // Complete NFT fetching logic
   const refreshNFTs = async () => {
-    console.log('Refreshing NFT data...')
+    console.log('Refreshing NFT data...', { account, isConnected })
     setWalletLoading(true)
     setReceiptLoading(true)
     setPoolLoading(true)
@@ -129,12 +130,11 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     setWalletNFTs([])
     setReceiptNFTs([])
     setPoolNFTs([])
-    setAddress(null)
     
     // Small delay to show loading state
     await new Promise(resolve => setTimeout(resolve, 100))
     
-    // Re-fetch everything
+    // Use external provider or create one
     const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
     if (!provider) {
       console.warn('No provider available for NFT fetching')
@@ -144,23 +144,9 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       return
     }
     
-    let addr = null
-    if (window.ethereum) {
-      try {
-        // Check if there are accounts available first
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' })
-        if (accounts && accounts.length > 0) {
-          const signer = await provider.getSigner()
-          addr = await signer.getAddress()
-        }
-      } catch (e) {
-        console.warn('Could not get signer:', e)
-      }
-    }
-    setAddress(addr)
-    
-    // If no address, clear wallet-specific data but still fetch pool NFTs
-    if (!addr) {
+    // If no wallet connected, clear wallet-specific data but still fetch pool NFTs
+    if (!isConnected || !account) {
+      console.log('No wallet connected, fetching pool NFTs only')
       setWalletNFTs([])
       setWalletLoading(false)
       setReceiptNFTs([])
@@ -172,12 +158,13 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       return
     }
 
+    console.log('Wallet connected, fetching all NFT data for:', account)
     // Fetch all NFT data in parallel
     await Promise.all([
-      fetchWalletNFTs(addr, provider),
-      fetchReceiptNFTs(addr, provider),
+      fetchWalletNFTs(account, provider),
+      fetchReceiptNFTs(account, provider),
       fetchPoolNFTs(provider),
-      fetchStakedNFTs(addr, provider)
+      fetchStakedNFTs(account, provider)
     ])
     
     // Fetch rewards when refreshing
@@ -552,7 +539,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   }
 
   const fetchPendingRewards = async () => {
-    if (!address || !stakeReceipt) {
+    if (!account || !stakeReceipt || !isConnected) {
       setPendingRewards('0')
       return
     }
@@ -563,11 +550,11 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       
       // Try to get pending rewards using earned() function
       if (receiptContract.earned) {
-        const earned = await receiptContract.earned(address)
+        const earned = await receiptContract.earned(account)
         setPendingRewards(ethers.formatEther(earned))
       } else {
         // Fallback to direct pendingRewards mapping if earned() doesn't exist
-        const pending = await receiptContract.pendingRewards(address)
+        const pending = await receiptContract.pendingRewards(account)
         setPendingRewards(ethers.formatEther(pending))
       }
     } catch (error) {
@@ -591,6 +578,15 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     }
   }, [externalProvider])
 
+  // Refresh data when wallet connection changes
+  useEffect(() => {
+    if (swapPool) {
+      console.log('Wallet connection changed:', { account, isConnected })
+      refreshNFTs()
+      fetchPendingRewards()
+    }
+  }, [account, isConnected, swapPool, stakeReceipt])
+
   // Fetch rewards periodically (every 30 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -598,7 +594,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     }, 30000)
     
     return () => clearInterval(interval)
-  }, [address, stakeReceipt])
+  }, [account, stakeReceipt])
   
   if (activeInterface === 'swap') {
     return (

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ethers } from 'ethers'
 import FactoryABI from '../abis/MultiPoolFactoryNonProxy.json'
+import StakeReceiptABI from '../abis/StakeReceipt.json'
 import PoolDetail from './PoolDetail'
 import NFTCollectionImage from './NFTCollectionImage'
 import { useWallet } from './WalletProvider'
@@ -28,6 +29,9 @@ export default function PoolList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showStakedOnly, setShowStakedOnly] = useState(false)
   const [userStakedPools, setUserStakedPools] = useState(new Set())
+  const [totalPendingRewards, setTotalPendingRewards] = useState('0')
+  const [claimingAll, setClaimingAll] = useState(false)
+  const [claimAllStatus, setClaimAllStatus] = useState('')
 
   const factoryAddressEnv = import.meta.env.VITE_FACTORY_ADDRESS || ''
   const [factoryAddress, setFactoryAddress] = useState(factoryAddressEnv)
@@ -230,6 +234,100 @@ export default function PoolList() {
     setLoading(false)
   }
 
+  // Calculate total pending rewards across all staked pools
+  const calculateTotalRewards = async () => {
+    if (!address || !provider || userStakedPools.size === 0) {
+      setTotalPendingRewards('0')
+      return
+    }
+
+    try {
+      let totalRewards = ethers.parseEther('0')
+      
+      for (const pool of pools) {
+        if (userStakedPools.has(pool.swapPool)) {
+          try {
+            const receiptContract = new ethers.Contract(pool.stakeReceipt, StakeReceiptABI, provider)
+            
+            // Try to get pending rewards using earned() function first
+            let pendingRewards
+            if (receiptContract.earned) {
+              pendingRewards = await receiptContract.earned(address)
+            } else {
+              // Fallback to direct pendingRewards mapping
+              pendingRewards = await receiptContract.pendingRewards(address)
+            }
+            
+            totalRewards = totalRewards + pendingRewards
+          } catch (error) {
+            console.warn(`Failed to fetch rewards for pool ${pool.swapPool}:`, error)
+          }
+        }
+      }
+      
+      setTotalPendingRewards(ethers.formatEther(totalRewards))
+    } catch (error) {
+      console.error('Failed to calculate total rewards:', error)
+      setTotalPendingRewards('0')
+    }
+  }
+
+  // Claim rewards from all staked pools
+  const claimAllRewards = async () => {
+    if (!signer || userStakedPools.size === 0) return
+
+    setClaimingAll(true)
+    setClaimAllStatus("Claiming rewards from all pools...")
+
+    try {
+      let successCount = 0
+      let failCount = 0
+
+      for (const pool of pools) {
+        if (userStakedPools.has(pool.swapPool)) {
+          try {
+            const receiptContract = new ethers.Contract(pool.stakeReceipt, StakeReceiptABI, signer)
+            
+            // Check if there are rewards to claim
+            let pendingRewards
+            if (receiptContract.earned) {
+              pendingRewards = await receiptContract.earned(address)
+            } else {
+              pendingRewards = await receiptContract.pendingRewards(address)
+            }
+            
+            if (pendingRewards > 0) {
+              const tx = await receiptContract.claimRewards()
+              await tx.wait()
+              successCount++
+              console.log(`✅ Claimed rewards from pool: ${pool.swapPool}`)
+            }
+          } catch (error) {
+            failCount++
+            console.error(`❌ Failed to claim from pool ${pool.swapPool}:`, error)
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        setClaimAllStatus(`✅ Successfully claimed rewards from ${successCount} pool(s)!`)
+        // Refresh rewards calculation
+        await calculateTotalRewards()
+      } else if (failCount > 0) {
+        setClaimAllStatus(`❌ Failed to claim rewards from ${failCount} pool(s)`)
+      } else {
+        setClaimAllStatus("No rewards to claim")
+      }
+
+    } catch (error) {
+      setClaimAllStatus(`❌ Claim all failed: ${error.reason || error.message}`)
+    }
+
+    setClaimingAll(false)
+    // Clear status after 5 seconds
+    setTimeout(() => setClaimAllStatus(''), 5000)
+  }
+
   // Auto-load pools when provider and factory address are ready
   useEffect(() => {
     if (provider && factoryAddress) {
@@ -237,6 +335,19 @@ export default function PoolList() {
     }
     // eslint-disable-next-line
   }, [provider, factoryAddress]);
+
+  // Calculate rewards when pools or user stakes change
+  useEffect(() => {
+    calculateTotalRewards()
+  }, [pools, userStakedPools, address])
+
+  // Recalculate rewards periodically
+  useEffect(() => {
+    if (userStakedPools.size > 0) {
+      const interval = setInterval(calculateTotalRewards, 30000) // Every 30 seconds
+      return () => clearInterval(interval)
+    }
+  }, [userStakedPools])
 
   return (
     <div className="space-y-6">
@@ -264,6 +375,62 @@ export default function PoolList() {
       )}
 
 
+
+      {/* Claim All Rewards Section */}
+      {isConnected && userStakedPools.size > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-full">
+                <svg className="w-8 h-8 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                </svg>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
+                  Total Pending Rewards
+                </div>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {totalPendingRewards} S
+                </div>
+                <div className="text-sm text-emerald-700 dark:text-emerald-300">
+                  From {userStakedPools.size} staked pool{userStakedPools.size !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={claimAllRewards}
+                disabled={claimingAll || parseFloat(totalPendingRewards) === 0}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+              >
+                {claimingAll ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Claiming...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                    Claim All Rewards
+                  </>
+                )}
+              </button>
+              {claimAllStatus && (
+                <div className={`text-sm font-medium ${
+                  claimAllStatus.includes('✅') 
+                    ? 'text-emerald-600 dark:text-emerald-400' 
+                    : 'text-red-600 dark:text-red-400'
+                }`}>
+                  {claimAllStatus}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Swap Pools Section */}
       <div className="space-y-4">

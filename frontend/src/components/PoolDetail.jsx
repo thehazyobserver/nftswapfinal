@@ -38,7 +38,23 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
               ✕ Close
             </button>
           </div>
-        </div>        <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
+        </div>        
+        {/* Prominent Swap Fee Display */}
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-center gap-3">
+            <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+            </svg>
+            <div className="text-center">
+              <div className="text-sm font-medium text-amber-800 dark:text-amber-200">Swap Fee</div>
+              <div className="text-xl font-bold text-amber-900 dark:text-amber-100">
+                {poolFee ? `${poolFee} S` : 'Loading...'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
           <NFTCollectionImage address={pool.nftCollection} collectionName={collectionName} size={64} />
           <div className="w-full">
             <div className="font-semibold text-base sm:text-lg text-blue-600 dark:text-blue-400 mb-1">Collection: <span className="text-gray-800 dark:text-gray-200">{collectionName || 'Loading...'}</span></div>
@@ -47,7 +63,6 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
             <div className="text-xs text-gray-600 dark:text-gray-400">Creator: {pool.creator}</div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Created: {pool.createdAt}</div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Active: {pool.active ? 'Yes' : 'No'}</div>
-            <div className="text-xs text-gray-600 dark:text-gray-400">Swap Fee: {poolFee ? `${poolFee} S` : 'Loading...'}</div>
           </div>
         </div>
 
