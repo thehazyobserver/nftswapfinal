@@ -686,25 +686,26 @@ export default function StonerFeePoolActions() {
     setLoading(false)
   }
 
-  // Show message if wallet not connected
-  if (!isWalletConnected) {
-    return (
-      <div className="p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-sm space-y-6">
-        <div className="text-center py-8 space-y-4">
-          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-2xl">🌿</span>
-          </div>
-          <div>
-            <h3 className="font-bold text-xl text-green-400 mb-2">Stoner NFT Staking</h3>
-            <p className="text-muted mb-4">Connect your wallet using the button in the header to stake Stoner NFTs and earn rewards</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // Show wallet connection notice if not connected, but still render full interface
+  const showWalletNotice = !isWalletConnected
 
   return (
     <div className="p-6 bg-white/95 dark:bg-gray-800/95 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-sm space-y-6">
+      {/* Wallet connection notice */}
+      {showWalletNotice && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center">
+          <div className="flex items-center justify-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="font-medium">Connect Wallet to Interact</span>
+          </div>
+          <p className="text-sm text-blue-600 dark:text-blue-400">
+            Connect your wallet using the button in the header to stake NFTs and claim rewards
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
@@ -712,13 +713,19 @@ export default function StonerFeePoolActions() {
           </div>
           <div>
             <h3 className="font-bold text-xl text-green-400">Stoner NFT Staking</h3>
-            <p className="text-sm text-muted">Connected: {walletAddress.slice(0,6)}...{walletAddress.slice(-4)}</p>
+            <p className="text-sm text-muted">
+              {isWalletConnected 
+                ? `Connected: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`
+                : 'Preview Mode - Connect wallet to interact'
+              }
+            </p>
           </div>
         </div>
         <button 
           onClick={handleClaim}
-          disabled={loading}
+          disabled={loading || !isWalletConnected}
           className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-all disabled:opacity-50 font-medium"
+          title={!isWalletConnected ? "Connect wallet to claim rewards" : ""}
         >
           Claim Rewards
         </button>
@@ -747,8 +754,9 @@ export default function StonerFeePoolActions() {
           </div>
           <button
             onClick={fetchRewards}
-            disabled={rewardsLoading}
+            disabled={rewardsLoading || !isWalletConnected}
             className="px-3 py-1 bg-yellow-600 text-white rounded text-sm disabled:opacity-50 hover:bg-yellow-700 transition-colors"
+            title={!isWalletConnected ? "Connect wallet to refresh rewards" : ""}
           >
             {rewardsLoading ? 'Loading...' : 'Refresh'}
           </button>
@@ -764,8 +772,9 @@ export default function StonerFeePoolActions() {
               </div>
               <button
                 onClick={handleClaimNative}
-                disabled={loading || parseFloat(nativeRewards) === 0}
+                disabled={loading || parseFloat(nativeRewards) === 0 || !isWalletConnected}
                 className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors"
+                title={!isWalletConnected ? "Connect wallet to claim" : ""}
               >
                 Claim S
               </button>
@@ -785,8 +794,9 @@ export default function StonerFeePoolActions() {
                 </div>
                 <button
                   onClick={handleClaim}
-                  disabled={loading || erc20Rewards.every(reward => parseFloat(reward.earned) === 0)}
+                  disabled={loading || erc20Rewards.every(reward => parseFloat(reward.earned) === 0) || !isWalletConnected}
                   className="px-3 py-1 bg-green-600 text-white rounded text-sm disabled:opacity-50 hover:bg-green-700 transition-colors"
+                  title={!isWalletConnected ? "Connect wallet to claim" : ""}
                 >
                   Claim All
                 </button>
@@ -802,8 +812,9 @@ export default function StonerFeePoolActions() {
                     </div>
                     <button
                       onClick={() => handleClaimERC20(reward.address)}
-                      disabled={loading || parseFloat(reward.earned) === 0}
+                      disabled={loading || parseFloat(reward.earned) === 0 || !isWalletConnected}
                       className="px-2 py-1 bg-green-600/80 text-white rounded text-xs disabled:opacity-50 hover:bg-green-600 transition-colors"
+                      title={!isWalletConnected ? "Connect wallet to claim" : ""}
                     >
                       Claim
                     </button>
@@ -829,8 +840,9 @@ export default function StonerFeePoolActions() {
           <div className="text-center">
             <button
               onClick={handleClaim}
-              disabled={loading}
+              disabled={loading || !isWalletConnected}
               className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-lg disabled:opacity-50 hover:from-yellow-600 hover:to-orange-700 transition-all font-semibold"
+              title={!isWalletConnected ? "Connect wallet to claim rewards" : ""}
             >
               {loading ? 'Claiming...' : 'Claim All Rewards'}
             </button>
@@ -846,8 +858,9 @@ export default function StonerFeePoolActions() {
             {!isApprovedForAll && (
               <button
                 onClick={handleApproveAll}
-                disabled={loading}
+                disabled={loading || !isWalletConnected}
                 className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                title={!isWalletConnected ? "Connect wallet to approve" : ""}
               >
                 Approve All
               </button>
@@ -888,8 +901,9 @@ export default function StonerFeePoolActions() {
               
               <button
                 onClick={handleStake}
-                disabled={loading || selectedTokens.length === 0 || !isApprovedForAll}
+                disabled={loading || selectedTokens.length === 0 || !isApprovedForAll || !isWalletConnected}
                 className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg disabled:opacity-50"
+                title={!isWalletConnected ? "Connect wallet to stake NFTs" : ""}
               >
                 {loading ? 'Staking...' : `Stake ${selectedTokens.length} NFT${selectedTokens.length !== 1 ? 's' : ''}`}
               </button>
@@ -935,8 +949,9 @@ export default function StonerFeePoolActions() {
               
               <button
                 onClick={handleUnstake}
-                disabled={loading || selectedStakedTokens.length === 0}
+                disabled={loading || selectedStakedTokens.length === 0 || !isWalletConnected}
                 className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg disabled:opacity-50"
+                title={!isWalletConnected ? "Connect wallet to unstake NFTs" : ""}
               >
                 {loading ? 'Unstaking...' : `Unstake ${selectedStakedTokens.length} NFT${selectedStakedTokens.length !== 1 ? 's' : ''}`}
               </button>
