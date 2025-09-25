@@ -28,8 +28,9 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
           </div>
         </div>
 
-        <div className="mt-6 flex gap-2">
+        <div className="mt-6 flex gap-2 flex-wrap">
           <a className="px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded shadow transition" href={`${import.meta.env.VITE_EXPLORER_BASE || 'https://explorer.sonic.org'}/address/${pool.swapPool}`} target="_blank" rel="noreferrer">Explorer</a>
+          <a className="px-3 py-1.5 text-sm bg-purple-500 hover:bg-purple-600 text-white rounded shadow transition" href={`https://nft.paintswap.io/sonic/collections/${pool.nftCollection}`} target="_blank" rel="noreferrer">PaintSwap</a>
           <button className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>Copy Address</button>
         </div>
 
