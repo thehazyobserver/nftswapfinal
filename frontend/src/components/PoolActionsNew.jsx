@@ -996,6 +996,8 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           onSwap={handleSwap}
           status={status}
           swapFee={swapFee}
+          provider={externalProvider}
+          userAddress={account}
         />
       </div>
     )

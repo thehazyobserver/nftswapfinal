@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { ethers } from 'ethers'
 import NFTTokenImage from './NFTTokenImage'
 import NFTLoadingSkeleton from './NFTLoadingSkeleton'
 import { useToast } from './ToastProvider'
@@ -10,11 +11,40 @@ export default function SwapInterface({
   loading, 
   onSwap, 
   status,
-  swapFee 
+  swapFee,
+  provider,
+  userAddress 
 }) {
   const [selectedSwapTokens, setSelectedSwapTokens] = useState([])
+  const [userBalance, setUserBalance] = useState('0')
+  const [insufficientFunds, setInsufficientFunds] = useState(false)
   const toast = useToast()
   const { executeTransaction, isTransactionPending } = useBlockchainTransaction()
+
+  // Check user balance and required swap fee
+  const checkBalance = async () => {
+    if (!provider || !userAddress || !swapFee || selectedSwapTokens.length === 0) {
+      setInsufficientFunds(false)
+      return
+    }
+
+    try {
+      const balance = await provider.getBalance(userAddress)
+      setUserBalance(balance.toString())
+      
+      const requiredFee = ethers.parseEther((parseFloat(swapFee) * selectedSwapTokens.length).toString())
+      const hasInsufficientFunds = balance < requiredFee
+      setInsufficientFunds(hasInsufficientFunds)
+    } catch (error) {
+      console.error('Error checking balance:', error)
+      setInsufficientFunds(false)
+    }
+  }
+
+  // Check balance whenever selection or swap fee changes
+  useEffect(() => {
+    checkBalance()
+  }, [selectedSwapTokens.length, swapFee, userAddress, provider])
 
   const handleSwap = async () => {
     if (selectedSwapTokens.length === 0) {
@@ -211,6 +241,30 @@ export default function SwapInterface({
             </button>
           )}
         </div>
+
+        {/* Insufficient Funds Notification */}
+        {insufficientFunds && selectedSwapTokens.length > 0 && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mt-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-red-100 dark:bg-red-900/40 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                  Insufficient Balance
+                </h4>
+                <p className="text-xs text-red-700 dark:text-red-300">
+                  You need {(parseFloat(swapFee) * selectedSwapTokens.length).toFixed(4)} S to swap {selectedSwapTokens.length} NFT{selectedSwapTokens.length > 1 ? 's' : ''}, but you only have {ethers.formatEther(userBalance)} S available.
+                </p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  Please add more funds to your wallet or reduce the number of NFTs to swap.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Pool NFTs Section */}
