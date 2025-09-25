@@ -1,8 +1,30 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { ethers } from 'ethers'
 import PoolActionsNew from './PoolActionsNew'
 import NFTCollectionImage from './NFTCollectionImage'
+import SwapPoolABI from '../abis/SwapPool.json'
 
 export default function PoolDetail({ pool, collectionName, onClose, provider }) {
+  const [poolFee, setPoolFee] = useState(null)
+
+  useEffect(() => {
+    const fetchPoolFee = async () => {
+      try {
+        if (!provider || !pool.swapPool) return
+        
+        const contract = new ethers.Contract(pool.swapPool, SwapPoolABI, provider)
+        const feeInWei = await contract.swapFeeInWei()
+        const feeInEth = ethers.formatEther(feeInWei)
+        setPoolFee(feeInEth)
+      } catch (error) {
+        console.error('Error fetching pool fee:', error)
+        setPoolFee('N/A')
+      }
+    }
+
+    fetchPoolFee()
+  }, [pool.swapPool, provider])
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
         <div className="bg-white dark:bg-gray-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700">
@@ -25,6 +47,7 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
             <div className="text-xs text-gray-600 dark:text-gray-400">Creator: {pool.creator}</div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Created: {pool.createdAt}</div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Active: {pool.active ? 'Yes' : 'No'}</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Swap Fee: {poolFee ? `${poolFee} S` : 'Loading...'}</div>
           </div>
         </div>
 
