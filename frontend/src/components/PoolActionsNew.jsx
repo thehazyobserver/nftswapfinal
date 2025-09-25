@@ -36,18 +36,123 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   }
 
   const handleSwap = async (selectedTokens) => {
+    if (selectedTokens.length === 0) {
+      setStatus('Please select at least one NFT to swap')
+      return
+    }
+
+    if (selectedTokens.length > 10) {
+      setStatus('You can only swap up to 10 NFTs at once.')
+      return
+    }
+
+    // Check if there are enough pool NFTs available for swapping
+    if (poolNFTs.length < selectedTokens.length) {
+      if (poolNFTs.length === 0) {
+        setStatus(`❌ Cannot swap: Pool is empty! You need to stake some NFTs first to create liquidity for swapping.`)
+      } else {
+        setStatus(`❌ Insufficient liquidity: Only ${poolNFTs.length} NFT${poolNFTs.length !== 1 ? 's' : ''} available in pool, but you selected ${selectedTokens.length}. Stake more NFTs or reduce your selection.`)
+      }
+      return
+    }
+
     setLoading(true)
-    setStatus('Swapping NFTs...')
+    setStatus('')
+
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
-      const tx = await contract.swapNFTs(selectedTokens)
+      
+      // Create NFT contract instance for the collection being swapped
+      const nftContract = new ethers.Contract(nftCollection, [
+        "function approve(address,uint256)",
+        "function getApproved(uint256) view returns (address)",
+        "function ownerOf(uint256) view returns (address)",
+        "function setApprovalForAll(address,bool)",
+        "function isApprovedForAll(address,address) view returns (bool)"
+      ], signer)
+      
+      // Check ownership and approval for all selected tokens
+      const userAddr = await signer.getAddress()
+      
+      // Check if user owns all tokens
+      setStatus('Verifying ownership...')
+      for (const tokenId of selectedTokens) {
+        const owner = await nftContract.ownerOf(tokenId)
+        if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+          setStatus(`❌ You don't own NFT #${tokenId}`)
+          setLoading(false)
+          return
+        }
+      }
+      
+      // Check and handle approvals
+      setStatus('Checking approvals...')
+      for (const tokenId of selectedTokens) {
+        try {
+          const approved = await nftContract.getApproved(tokenId)
+          if (approved.toLowerCase() !== swapPool.toLowerCase()) {
+            // Need to approve this token
+            setStatus(`Requesting approval for NFT #${tokenId}...`)
+            const approveTx = await nftContract.approve(swapPool, tokenId)
+            await approveTx.wait()
+          }
+        } catch (e) {
+          if (e.code === 'ACTION_REJECTED') {
+            setStatus('❌ User cancelled approval transaction')
+            setLoading(false)
+            return
+          }
+          setStatus(`❌ Failed to approve NFT #${tokenId}: ${e.message}`)
+          setLoading(false)
+          return
+        }
+      }
+      
+      // Get swap fee and execute swap(s)
+      const fee = await contract.swapFeeInWei()
+      const totalFee = fee * BigInt(selectedTokens.length)
+      
+      setStatus(`Swapping ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}...`)
+      
+      let tx
+      if (selectedTokens.length > 1 && contract.swapNFTBatch) {
+        // Use batch swap function
+        tx = await contract.swapNFTBatch(selectedTokens, { value: totalFee })
+      } else {
+        // For single NFT or if batch function not available, use single swap
+        tx = await contract.swapNFT(selectedTokens[0], { value: fee })
+      }
+      
       await tx.wait()
-      setStatus('Swap successful! ✅')
-      // Refresh data
+      setStatus(`✅ Successfully swapped ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}!`)
+      
+      // Refresh NFT lists
       await refreshNFTs()
+      
     } catch (error) {
-      setStatus(`Swap failed: ${error.reason || error.message}`)
+      console.error('Swap error:', error)
+      
+      // Handle specific error types
+      if (error.code === 'ACTION_REJECTED') {
+        setStatus('❌ User cancelled transaction')
+      } else if (error.data === '0xa17e11d5' || error.message.includes('InsufficientLiquidity')) {
+        setStatus(`❌ Insufficient liquidity: Not enough NFTs in pool for ${selectedTokens.length} swap${selectedTokens.length > 1 ? 's' : ''}`)
+      } else if (error.data === '0xa0712d68' || error.message.includes('SameTokenSwap')) {
+        setStatus('❌ Cannot swap: One of your NFTs is already in the pool')
+      } else if (error.data === '0x82b42900' || error.message.includes('TokenNotApproved')) {
+        setStatus('❌ NFT not approved for transfer')
+      } else if (error.data === '0x8baa579f' || error.message.includes('NotTokenOwner')) {
+        setStatus('❌ You do not own one or more of the selected NFTs')
+      } else if (error.data === '0x025dbdd4' || error.message.includes('IncorrectFee')) {
+        setStatus('❌ Incorrect swap fee sent')
+      } else if (error.data === '0xd05cb609' || error.message.includes('NotInitialized')) {
+        setStatus('❌ Pool not initialized')
+      } else {
+        // Generic error handling
+        const errorMessage = error.reason || error.message || 'Unknown error'
+        setStatus('❌ Swap failed: ' + errorMessage)
+      }
     }
     setLoading(false)
   }
