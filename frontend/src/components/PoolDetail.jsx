@@ -49,7 +49,9 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
           </button>
         </div>
 
-  <PoolActionsNew swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} provider={provider} />
+        <div className="mt-8">
+          <PoolActionsNew swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} provider={provider} />
+        </div>
       </div>
     </div>
   )
