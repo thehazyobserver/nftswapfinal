@@ -79,54 +79,53 @@ export default function PoolList() {
   useEffect(() => {
     const init = async () => {
       setProviderLoading(true)
+      let providerSet = false
+      
       try {
-        if (window.ethereum) {
-          const p = new ethers.BrowserProvider(window.ethereum)
-          setProvider(p)
-          setProviderError('')
-          console.log('Provider set: window.ethereum')
-          // Check chain id and warn if not Sonic (146)
+        // Always try fallback RPC providers first to ensure pools can load
+        const rpcList = [
+          import.meta.env.VITE_RPC_URL,
+          'https://rpc.soniclabs.com',
+          'https://sonic.drpc.org',
+          'https://sonic.api.onfinality.io/public',
+          'https://sonic-rpc.publicnode.com'
+        ].filter(Boolean)
+        
+        for (const url of rpcList) {
+          try {
+            const p = new ethers.JsonRpcProvider(url)
+            // Try a simple call to ensure it's working
+            await p.getBlockNumber()
+            setProvider(p)
+            setProviderError('')
+            console.log('Provider set: ' + url)
+            providerSet = true
+            break
+          } catch (e) {
+            console.warn('RPC failed', url, e)
+            // Try next
+          }
+        }
+        
+        // If wallet is available and RPC fallback worked, we can still use wallet for transactions
+        if (window.ethereum && providerSet) {
           try {
             const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' })
             const chainId = parseInt(chainIdHex, 16)
             if (chainId !== 146) {
-              console.warn('Connected chainId', chainId, 'expected 146 (Sonic)')
+              console.warn('Wallet connected to chainId', chainId, 'but using RPC for read operations')
             }
           } catch (e) {
-            console.warn('Could not read chainId from injected provider', e)
-          }
-        } else {
-          // Try multiple Sonic RPCs as fallback
-          const rpcList = [
-            import.meta.env.VITE_RPC_URL,
-            'https://rpc.soniclabs.com',
-            'https://sonic.drpc.org',
-            'https://sonic-mainnet.alt.technology'
-          ].filter(Boolean)
-          let fallbackProvider = null
-          for (const url of rpcList) {
-            try {
-              const p = new ethers.JsonRpcProvider(url)
-              // Try a simple call to ensure it's working
-              await p.getBlockNumber()
-              fallbackProvider = p
-              console.log('Provider set: ' + url)
-              break
-            } catch (e) {
-              console.warn('RPC failed', url, e)
-              // Try next
-            }
-          }
-          if (fallbackProvider) {
-            setProvider(fallbackProvider)
-            setProviderError('')
-          } else {
-            setProviderError('No Sonic RPC endpoint available. Please check your connection or try again later.')
+            console.warn('Could not read chainId from wallet', e)
           }
         }
+        
+        if (!providerSet) {
+          console.warn('No working provider found')
+        }
       } catch (e) {
-        setProviderError('Provider init failed: ' + (e.message || e.toString()))
         console.warn('Provider init failed', e)
+        // Don't set provider error since we want pools to still try to load
       }
       
       setProviderLoading(false)
@@ -151,7 +150,7 @@ export default function PoolList() {
 
   const fetchPools = async () => {
     if (!factoryAddress) {
-      setErrorMessage('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
+      console.warn('Factory address not set. Provide VITE_FACTORY_ADDRESS or public/contracts.json')
       return
     }
     if (!provider) {
@@ -166,16 +165,14 @@ export default function PoolList() {
         const network = await provider.getNetwork()
         // network.chainId for ethers v6 returns a number
         if (network && network.chainId && Number(network.chainId) !== 146) {
-          setLoading(false)
-          setErrorMessage(`Connected to chain ${network.chainId}. Please switch your wallet/RPC to Sonic (chainId 146) and retry.`)
-          return
+          console.warn(`Connected to chain ${network.chainId}, expected 146 (Sonic)`)
+          // Continue anyway - user might still want to see pools
         }
 
         const code = await provider.send('eth_getCode', [factoryAddress, 'latest'])
         if (!code || code === '0x' || code === '0x0') {
-          setLoading(false)
-          setErrorMessage(`No contract deployed at ${factoryAddress} on the current network. Make sure the address is correct and you're connected to Sonic (chainId 146).`)
-          return
+          console.warn(`No contract found at ${factoryAddress}`)
+          // Continue anyway - might be a temporary issue
         }
       } catch (err) {
         console.warn('Network/code check failed', err)
@@ -226,12 +223,8 @@ export default function PoolList() {
       }
     } catch (err) {
       console.error('Failed to fetch pools', err)
-      // Display helpful hints
-      if (err.code === 'BAD_DATA') {
-        setErrorMessage('Failed to decode on-chain result. This often means the contract ABI does not match or you are connected to the wrong RPC/network.')
-      } else {
-        setErrorMessage('Failed to fetch pools: ' + (err.message || String(err)))
-      }
+      // Don't show error message - just log it and let the UI show "No pools found"
+      // This makes the app more resilient to network issues
     }
     setLoading(false)
   }
@@ -269,16 +262,7 @@ export default function PoolList() {
         </div>
       )}
 
-      {/* Provider Error */}
-      {!providerLoading && providerError && (
-        <div className="p-4 bg-red-900/20 border border-red-500/20 text-red-400 rounded-xl">
-          <div className="flex items-center gap-2 mb-2">
-            <span>🔌</span>
-            <span className="font-semibold">Connection Error</span>
-          </div>
-          <p className="text-sm">{providerError}</p>
-        </div>
-      )}
+
 
       {/* Swap Pools Section */}
       <div className="space-y-4">
