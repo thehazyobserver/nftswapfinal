@@ -86,24 +86,23 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
         }
       }
       
-      // Check and handle approvals
+      // Check and handle approvals using setApprovalForAll
       setStatus('Checking approvals...')
-      for (const tokenId of selectedTokens) {
+      const isApprovedForAll = await nftContract.isApprovedForAll(userAddr, swapPool)
+      
+      if (!isApprovedForAll) {
         try {
-          const approved = await nftContract.getApproved(tokenId)
-          if (approved.toLowerCase() !== swapPool.toLowerCase()) {
-            // Need to approve this token
-            setStatus(`Requesting approval for NFT #${tokenId}...`)
-            const approveTx = await nftContract.approve(swapPool, tokenId)
-            await approveTx.wait()
-          }
+          setStatus('Requesting approval for all NFTs...')
+          const approveTx = await nftContract.setApprovalForAll(swapPool, true)
+          await approveTx.wait()
+          setStatus('✅ Approval granted for all NFTs')
         } catch (e) {
           if (e.code === 'ACTION_REJECTED') {
             setStatus('❌ User cancelled approval transaction')
             setLoading(false)
             return
           }
-          setStatus(`❌ Failed to approve NFT #${tokenId}: ${e.message}`)
+          setStatus(`❌ Failed to approve NFTs: ${e.message}`)
           setLoading(false)
           return
         }
@@ -126,6 +125,15 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       
       await tx.wait()
       setStatus(`✅ Successfully swapped ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}!`)
+      
+      // Optional: Revoke approval for security (uncomment if desired)
+      // try {
+      //   setStatus('Revoking approval for security...')
+      //   const revokeTx = await nftContract.setApprovalForAll(swapPool, false)
+      //   await revokeTx.wait()
+      // } catch (e) {
+      //   console.warn('Failed to revoke approval:', e)
+      // }
       
       // Refresh NFT lists
       await refreshNFTs()
@@ -158,35 +166,156 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   }
 
   const handleStake = async (selectedTokens) => {
+    if (selectedTokens.length === 0) {
+      setStatus('Please select at least one NFT to stake')
+      return
+    }
+
+    if (selectedTokens.length > 10) {
+      setStatus('You can only stake up to 10 NFTs at once.')
+      return
+    }
+
+    // Check for duplicates
+    const unique = new Set(selectedTokens)
+    if (unique.size !== selectedTokens.length) {
+      setStatus('Duplicate NFTs selected. Please select each NFT only once.')
+      return
+    }
+
     setLoading(true)
-    setStatus('Staking NFTs...')
+    setStatus('')
+
     try {
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
-      const tx = await contract.stakeNFTs(selectedTokens)
+      
+      // Create NFT contract instance for approvals
+      const nftContract = new ethers.Contract(nftCollection, [
+        "function approve(address,uint256)",
+        "function getApproved(uint256) view returns (address)",
+        "function ownerOf(uint256) view returns (address)",
+        "function setApprovalForAll(address,bool)",
+        "function isApprovedForAll(address,address) view returns (bool)"
+      ], signer)
+      
+      // Check ownership for all selected tokens
+      const userAddr = await signer.getAddress()
+      
+      setStatus('Verifying ownership...')
+      for (const tokenId of selectedTokens) {
+        const owner = await nftContract.ownerOf(tokenId)
+        if (owner.toLowerCase() !== userAddr.toLowerCase()) {
+          setStatus(`❌ You don't own NFT #${tokenId}`)
+          setLoading(false)
+          return
+        }
+      }
+
+      // Check and handle approvals using setApprovalForAll
+      setStatus('Checking approvals...')
+      const isApprovedForAll = await nftContract.isApprovedForAll(userAddr, swapPool)
+      
+      if (!isApprovedForAll) {
+        try {
+          setStatus('Requesting approval for all NFTs...')
+          const approveTx = await nftContract.setApprovalForAll(swapPool, true)
+          await approveTx.wait()
+          setStatus('✅ Approval granted for all NFTs')
+        } catch (e) {
+          if (e.code === 'ACTION_REJECTED') {
+            setStatus('❌ User cancelled approval transaction')
+            setLoading(false)
+            return
+          }
+          setStatus(`❌ Failed to approve NFTs: ${e.message}`)
+          setLoading(false)
+          return
+        }
+      }
+
+      // Execute staking
+      setStatus(`Staking ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}...`)
+      
+      let tx
+      if (selectedTokens.length > 1) {
+        // Always use batch function for multiple tokens
+        tx = await contract.stakeNFTBatch(selectedTokens)
+      } else {
+        tx = await contract.stakeNFT(selectedTokens[0])
+      }
+      
       await tx.wait()
-      setStatus('Stake successful! ✅')
+      setStatus(`✅ Successfully staked ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}!`)
+      
+      // Optional: Revoke approval for security (uncomment if desired)
+      // try {
+      //   setStatus('Revoking approval for security...')
+      //   const revokeTx = await nftContract.setApprovalForAll(swapPool, false)
+      //   await revokeTx.wait()
+      // } catch (e) {
+      //   console.warn('Failed to revoke approval:', e)
+      // }
+      
       // Refresh data
       await refreshNFTs()
+      
     } catch (error) {
-      setStatus(`Stake failed: ${error.reason || error.message}`)
+      console.error('Stake error:', error)
+      
+      // Handle specific error types
+      if (error.code === 'ACTION_REJECTED') {
+        setStatus('❌ User cancelled transaction')
+      } else {
+        const errorMessage = error.reason || error.message || 'Unknown error'
+        setStatus('❌ Stake failed: ' + errorMessage)
+      }
     }
     setLoading(false)
   }
 
   const handleUnstake = async (selectedTokens) => {
+    if (selectedTokens.length === 0) {
+      setStatus('Please select at least one NFT to unstake')
+      return
+    }
+
+    if (selectedTokens.length > 10) {
+      setStatus('You can only unstake up to 10 NFTs at once.')
+      return
+    }
+
     setLoading(true)
-    setStatus('Unstaking NFTs...')
+    setStatus('')
+
     try {
       const signer = await getSigner()
-      const receiptContract = new ethers.Contract(stakeReceipt, StakeReceiptABI, signer)
-      const tx = await receiptContract.unstakeNFTs(selectedTokens)
+      const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
+      
+      setStatus(`Unstaking ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}...`)
+      
+      let tx
+      if (selectedTokens.length > 1 && contract.unstakeNFTBatch) {
+        tx = await contract.unstakeNFTBatch(selectedTokens)
+      } else {
+        tx = await contract.unstakeNFT(selectedTokens[0])
+      }
+      
       await tx.wait()
-      setStatus('Unstake successful! ✅')
+      setStatus(`✅ Successfully unstaked ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}!`)
+      
       // Refresh data
       await refreshNFTs()
+      
     } catch (error) {
-      setStatus(`Unstake failed: ${error.reason || error.message}`)
+      console.error('Unstake error:', error)
+      
+      if (error.code === 'ACTION_REJECTED') {
+        setStatus('❌ User cancelled transaction')
+      } else {
+        const errorMessage = error.reason || error.message || 'Unknown error'
+        setStatus('❌ Unstake failed: ' + errorMessage)
+      }
     }
     setLoading(false)
   }
