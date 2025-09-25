@@ -7,7 +7,7 @@ import StakingInterface from './StakingInterface'
 import { useWallet } from './WalletProvider'
 
 export default function PoolActionsNew({ swapPool, stakeReceipt, provider: externalProvider }) {
-  const { account, isConnected } = useWallet()
+  const { address: account, isConnected } = useWallet()
   const [activeInterface, setActiveInterface] = useState(null) // null, 'swap', 'stake'
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
