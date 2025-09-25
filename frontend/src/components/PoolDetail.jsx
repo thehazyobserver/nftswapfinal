@@ -19,7 +19,7 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
         </div>        <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
           <NFTCollectionImage address={pool.nftCollection} collectionName={collectionName} size={64} />
           <div className="w-full">
-            <div className="font-semibold text-base sm:text-lg text-blue-600 dark:text-blue-400 mb-1">Collection: <span className="font-mono text-gray-600 dark:text-gray-400">{pool.nftCollection.slice(0, 6)}...{pool.nftCollection.slice(-4)}</span></div>
+            <div className="font-semibold text-base sm:text-lg text-blue-600 dark:text-blue-400 mb-1">Collection: <span className="text-gray-800 dark:text-gray-200">{collectionName || 'Loading...'}</span></div>
             <div className="text-xs text-gray-600 dark:text-gray-400">SwapPool: <span className="font-mono">{pool.swapPool.slice(0, 6)}...{pool.swapPool.slice(-4)}</span></div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Receipt: <span className="font-mono">{pool.stakeReceipt.slice(0, 6)}...{pool.stakeReceipt.slice(-4)}</span></div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Creator: {pool.creator}</div>
@@ -28,10 +28,25 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
           </div>
         </div>
 
-        <div className="mt-6 flex gap-2 flex-wrap">
-          <a className="px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded shadow transition" href={`${import.meta.env.VITE_EXPLORER_BASE || 'https://explorer.sonic.org'}/address/${pool.swapPool}`} target="_blank" rel="noreferrer">Explorer</a>
-          <a className="px-3 py-1.5 text-sm bg-purple-500 hover:bg-purple-600 text-white rounded shadow transition" href={`https://nft.paintswap.io/sonic/collections/${pool.nftCollection}`} target="_blank" rel="noreferrer">PaintSwap</a>
-          <button className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>Copy Address</button>
+        <div className="mt-6 flex gap-3 flex-wrap">
+          <a className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200" href={`${import.meta.env.VITE_EXPLORER_BASE || 'https://explorer.sonic.org'}/address/${pool.swapPool}`} target="_blank" rel="noreferrer">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Explorer
+          </a>
+          <a className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-purple-500 hover:bg-purple-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200" href={`https://nft.paintswap.io/sonic/collections/${pool.nftCollection}`} target="_blank" rel="noreferrer">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 3v1h6V3H9zm2 5a1 1 0 100 2 1 1 0 000-2zm0 4a1 1 0 100 2 1 1 0 000-2z" />
+            </svg>
+            PaintSwap
+          </a>
+          <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg shadow-md hover:shadow-lg transition-all duration-200" onClick={() => navigator.clipboard.writeText(pool.swapPool)}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Copy Address
+          </button>
         </div>
 
   <PoolActionsNew swapPool={pool.swapPool} stakeReceipt={pool.stakeReceipt} provider={provider} />
