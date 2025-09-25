@@ -308,8 +308,36 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
         try {
           const tokenIdStr = tokenId.toString()
           let tokenURI = ''
+          let imageUrl = ''
+          
           try {
             tokenURI = await nftContract.tokenURI(tokenId)
+            
+            if (tokenURI) {
+              // Handle different URI formats
+              let metadataUrl = tokenURI
+              
+              // Handle IPFS URIs
+              if (tokenURI.startsWith('ipfs://')) {
+                metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              
+              // Fetch metadata JSON
+              try {
+                const response = await fetch(metadataUrl)
+                const metadata = await response.json()
+                
+                if (metadata.image) {
+                  imageUrl = metadata.image
+                  // Handle IPFS image URLs
+                  if (imageUrl.startsWith('ipfs://')) {
+                    imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                }
+              } catch (metadataError) {
+                console.warn(`Failed to fetch metadata for wallet token ${tokenId}:`, metadataError)
+              }
+            }
           } catch {}
           
           // Check individual approval
@@ -321,7 +349,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           
           return {
             tokenId: tokenIdStr,
-            image: tokenURI,
+            image: imageUrl || '',
             approved
           }
         } catch (error) {
@@ -373,14 +401,42 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           const originalTokenId = await receiptContract.receiptToOriginalToken(receiptTokenId)
           
           let tokenURI = ''
+          let imageUrl = ''
+          
           try {
             tokenURI = await receiptContract.tokenURI(receiptTokenId)
+            
+            if (tokenURI) {
+              // Handle different URI formats
+              let metadataUrl = tokenURI
+              
+              // Handle IPFS URIs
+              if (tokenURI.startsWith('ipfs://')) {
+                metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              
+              // Fetch metadata JSON
+              try {
+                const response = await fetch(metadataUrl)
+                const metadata = await response.json()
+                
+                if (metadata.image) {
+                  imageUrl = metadata.image
+                  // Handle IPFS image URLs
+                  if (imageUrl.startsWith('ipfs://')) {
+                    imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                }
+              } catch (metadataError) {
+                console.warn(`Failed to fetch metadata for receipt token ${receiptTokenId}:`, metadataError)
+              }
+            }
           } catch {}
           
           tokens.push({
             tokenId: receiptTokenId.toString(),
             originalTokenId: originalTokenId.toString(),
-            image: tokenURI
+            image: imageUrl || ''
           })
         } catch (error) {
           console.warn(`Failed to fetch receipt token ${i}:`, error)
@@ -422,13 +478,45 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       const poolNftPromises = poolTokenIds.map(async (tokenId) => {
         try {
           let tokenURI = ''
+          let imageUrl = ''
+          
           try {
             tokenURI = await nftContract.tokenURI(tokenId)
-          } catch {}
+            console.log(`🏊 Token ${tokenId} URI:`, tokenURI)
+            
+            if (tokenURI) {
+              // Handle different URI formats
+              let metadataUrl = tokenURI
+              
+              // Handle IPFS URIs
+              if (tokenURI.startsWith('ipfs://')) {
+                metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+              }
+              
+              // Fetch metadata JSON
+              try {
+                const response = await fetch(metadataUrl)
+                const metadata = await response.json()
+                
+                if (metadata.image) {
+                  imageUrl = metadata.image
+                  // Handle IPFS image URLs
+                  if (imageUrl.startsWith('ipfs://')) {
+                    imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                }
+                console.log(`🏊 Token ${tokenId} image:`, imageUrl)
+              } catch (metadataError) {
+                console.warn(`Failed to fetch metadata for token ${tokenId}:`, metadataError)
+              }
+            }
+          } catch (uriError) {
+            console.warn(`Failed to get tokenURI for token ${tokenId}:`, uriError)
+          }
           
           return {
             tokenId: tokenId.toString(),
-            image: tokenURI
+            image: imageUrl || ''
           }
         } catch (error) {
           console.warn(`Failed to fetch pool NFT metadata for token ${tokenId}:`, error)
