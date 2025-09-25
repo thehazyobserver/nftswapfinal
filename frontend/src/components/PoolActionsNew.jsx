@@ -90,6 +90,13 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           // Check if token is already in the pool (this would cause SameTokenSwap error)
           const poolTokens = await contract.getPoolTokens()
           const poolTokenStrings = poolTokens.map(id => id.toString())
+          console.log(`🔍 Debug - Token #${tokenId} check:`, {
+            tokenId: tokenId.toString(),
+            owner: owner,
+            poolTokensCount: poolTokens.length,
+            isInPool: poolTokenStrings.includes(tokenId.toString())
+          })
+          
           if (poolTokenStrings.includes(tokenId.toString())) {
             setStatus(`❌ NFT #${tokenId} is already in the pool and cannot be swapped`)
             setLoading(false)
@@ -129,19 +136,103 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
         }
       }
       
-      // Get swap fee and execute swap(s)
-      const fee = await contract.swapFeeInWei()
-      const totalFee = fee * BigInt(selectedTokens.length)
+      // Get swap fee and validate contract state
+      setStatus('Validating contract state...')
       
+      // Check if pool is initialized
+      try {
+        const isInitialized = await contract.initialized()
+        if (!isInitialized) {
+          setStatus('❌ Pool is not initialized')
+          setLoading(false)
+          return
+        }
+      } catch (e) {
+        console.warn('Could not check initialized state:', e)
+      }
+
+      // Check if pool is paused
+      try {
+        const isPaused = await contract.paused()
+        if (isPaused) {
+          setStatus('❌ Pool is currently paused')
+          setLoading(false)
+          return
+        }
+      } catch (e) {
+        console.warn('Could not check paused state:', e)
+      }
+
+      // Check pool liquidity
+      const poolTokens = await contract.getPoolTokens()
+      console.log(`🏊 Pool liquidity check:`, {
+        availableTokens: poolTokens.length,
+        requestedSwaps: selectedTokens.length,
+        hasEnoughLiquidity: poolTokens.length >= selectedTokens.length
+      })
+      
+      if (poolTokens.length < selectedTokens.length) {
+        setStatus(`❌ Insufficient pool liquidity: Only ${poolTokens.length} NFT${poolTokens.length !== 1 ? 's' : ''} available, need ${selectedTokens.length}`)
+        setLoading(false)
+        return
+      }
+
+      if (poolTokens.length === 0) {
+        setStatus('❌ Pool is empty - no NFTs available for swapping')
+        setLoading(false)
+        return
+      }
+
+      // Get swap fee
+      const fee = await contract.swapFeeInWei()
+      console.log('Swap fee per NFT:', ethers.formatEther(fee), 'ETH')
+      
+      // Check user's balance
+      const userBalance = await externalProvider.getBalance(userAddr)
+      const requiredFee = fee * BigInt(selectedTokens.length)
+      
+      if (userBalance < requiredFee) {
+        setStatus(`❌ Insufficient balance. Need ${ethers.formatEther(requiredFee)} ETH, have ${ethers.formatEther(userBalance)} ETH`)
+        setLoading(false)
+        return
+      }
+
       setStatus(`Swapping ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}...`)
       
+      // Final validation: try to estimate gas before executing
+      setStatus('Estimating transaction cost...')
+      
       let tx
-      if (selectedTokens.length > 1 && contract.swapNFTBatch) {
-        // Use batch swap function
-        tx = await contract.swapNFTBatch(selectedTokens, { value: totalFee })
-      } else {
-        // For single NFT or if batch function not available, use single swap
-        tx = await contract.swapNFT(selectedTokens[0], { value: fee })
+      try {
+        if (selectedTokens.length > 1 && contract.swapNFTBatch) {
+          // Check if batch function exists and estimate gas
+          const gasEstimate = await contract.swapNFTBatch.estimateGas(selectedTokens, { value: requiredFee })
+          console.log('Batch swap gas estimate:', gasEstimate.toString())
+          tx = await contract.swapNFTBatch(selectedTokens, { value: requiredFee })
+        } else {
+          // Check if single function exists and estimate gas
+          const gasEstimate = await contract.swapNFT.estimateGas(selectedTokens[0], { value: fee })
+          console.log('Single swap gas estimate:', gasEstimate.toString())
+          tx = await contract.swapNFT(selectedTokens[0], { value: fee })
+        }
+      } catch (gasError) {
+        console.error('Gas estimation failed:', gasError)
+        
+        // Try to provide more specific error messages
+        if (gasError.reason) {
+          setStatus(`❌ Transaction would fail: ${gasError.reason}`)
+        } else if (gasError.message.includes('insufficient funds')) {
+          setStatus('❌ Insufficient funds for gas + swap fee')
+        } else if (gasError.message.includes('execution reverted')) {
+          setStatus('❌ Transaction would be reverted by contract')
+        } else if (gasError.data) {
+          // Try to decode the error data
+          setStatus(`❌ Contract error: ${gasError.data}`)
+        } else {
+          setStatus(`❌ Transaction validation failed: ${gasError.message}`)
+        }
+        setLoading(false)
+        return
       }
       
       await tx.wait()

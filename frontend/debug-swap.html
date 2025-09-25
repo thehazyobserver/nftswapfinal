@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Swap Debug Tool</title>
+    <script src="https://cdn.ethers.io/lib/ethers-6.15.0.umd.min.js"></script>
+</head>
+<body>
+    <h1>NFT Swap Debug Tool</h1>
+    
+    <div>
+        <h3>Token Validation</h3>
+        <input type="number" id="tokenId" placeholder="Token ID (e.g., 1462)" value="1462">
+        <button onclick="debugToken()">Debug Token</button>
+        <div id="tokenResults"></div>
+    </div>
+
+    <div>
+        <h3>Pool Status</h3>
+        <button onclick="debugPool()">Debug Pool</button>
+        <div id="poolResults"></div>
+    </div>
+
+    <script>
+        const SWAP_POOL_ADDRESS = '0x4C6D6010b75f5Da44598B74111fAEa9713dDd6da';
+        const NFT_COLLECTION_ADDRESS = '0x'; // Will be fetched from pool
+        
+        const SWAP_POOL_ABI = [
+            "function nftCollection() view returns (address)",
+            "function getPoolTokens() view returns (uint256[])",
+            "function swapFeeInWei() view returns (uint256)",
+            "function initialized() view returns (bool)",
+            "function paused() view returns (bool)",
+            "function earned(address) view returns (uint256)",
+            "function pendingRewards(address) view returns (uint256)"
+        ];
+        
+        const NFT_ABI = [
+            "function ownerOf(uint256) view returns (address)",
+            "function tokenURI(uint256) view returns (string)",
+            "function balanceOf(address) view returns (uint256)"
+        ];
+
+        async function getProvider() {
+            if (!window.ethereum) {
+                throw new Error('MetaMask not found');
+            }
+            return new ethers.BrowserProvider(window.ethereum);
+        }
+
+        async function debugToken() {
+            const tokenId = document.getElementById('tokenId').value;
+            const resultsDiv = document.getElementById('tokenResults');
+            
+            try {
+                const provider = await getProvider();
+                const signer = await provider.getSigner();
+                const userAddress = await signer.getAddress();
+                
+                const poolContract = new ethers.Contract(SWAP_POOL_ADDRESS, SWAP_POOL_ABI, provider);
+                const nftCollectionAddress = await poolContract.nftCollection();
+                const nftContract = new ethers.Contract(nftCollectionAddress, NFT_ABI, provider);
+                
+                const results = [];
+                
+                // Check if token exists
+                try {
+                    const owner = await nftContract.ownerOf(tokenId);
+                    results.push(`✅ Token #${tokenId} exists`);
+                    results.push(`👤 Owner: ${owner}`);
+                    results.push(`🔒 User owns token: ${owner.toLowerCase() === userAddress.toLowerCase() ? 'YES' : 'NO'}`);
+                } catch (e) {
+                    results.push(`❌ Token #${tokenId} does not exist: ${e.reason || e.message}`);
+                }
+                
+                // Check if token is in pool
+                try {
+                    const poolTokens = await poolContract.getPoolTokens();
+                    const isInPool = poolTokens.some(id => id.toString() === tokenId.toString());
+                    results.push(`🏊 Token in pool: ${isInPool ? 'YES' : 'NO'}`);
+                    results.push(`📊 Pool has ${poolTokens.length} tokens available`);
+                } catch (e) {
+                    results.push(`❌ Could not check pool tokens: ${e.message}`);
+                }
+                
+                // Check token URI
+                try {
+                    const tokenURI = await nftContract.tokenURI(tokenId);
+                    results.push(`🖼️ Token URI: ${tokenURI.substring(0, 50)}...`);
+                } catch (e) {
+                    results.push(`❌ Could not get token URI: ${e.reason || e.message}`);
+                }
+                
+                resultsDiv.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div style="color: red;">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function debugPool() {
+            const resultsDiv = document.getElementById('poolResults');
+            
+            try {
+                const provider = await getProvider();
+                const signer = await provider.getSigner();
+                const userAddress = await signer.getAddress();
+                
+                const poolContract = new ethers.Contract(SWAP_POOL_ADDRESS, SWAP_POOL_ABI, provider);
+                
+                const results = [];
+                
+                // Check pool state
+                try {
+                    const initialized = await poolContract.initialized();
+                    results.push(`🔧 Pool initialized: ${initialized ? 'YES' : 'NO'}`);
+                } catch (e) {
+                    results.push(`❌ Could not check initialized: ${e.message}`);
+                }
+                
+                try {
+                    const paused = await poolContract.paused();
+                    results.push(`⏸️ Pool paused: ${paused ? 'YES' : 'NO'}`);
+                } catch (e) {
+                    results.push(`❌ Could not check paused: ${e.message}`);
+                }
+                
+                // Check swap fee
+                try {
+                    const fee = await poolContract.swapFeeInWei();
+                    results.push(`💰 Swap fee: ${ethers.formatEther(fee)} ETH`);
+                } catch (e) {
+                    results.push(`❌ Could not get swap fee: ${e.message}`);
+                }
+                
+                // Check user balance
+                try {
+                    const balance = await provider.getBalance(userAddress);
+                    results.push(`💳 User balance: ${ethers.formatEther(balance)} ETH`);
+                } catch (e) {
+                    results.push(`❌ Could not get user balance: ${e.message}`);
+                }
+                
+                // Check NFT collection
+                try {
+                    const nftCollection = await poolContract.nftCollection();
+                    results.push(`🎨 NFT Collection: ${nftCollection}`);
+                    
+                    const nftContract = new ethers.Contract(nftCollection, NFT_ABI, provider);
+                    const userNFTBalance = await nftContract.balanceOf(userAddress);
+                    results.push(`🃏 User NFT balance: ${userNFTBalance.toString()}`);
+                } catch (e) {
+                    results.push(`❌ Could not check NFT collection: ${e.message}`);
+                }
+                
+                // Check rewards
+                try {
+                    const earned = await poolContract.earned(userAddress);
+                    results.push(`💎 Earned rewards: ${ethers.formatEther(earned)} ETH`);
+                } catch (e) {
+                    try {
+                        const pending = await poolContract.pendingRewards(userAddress);
+                        results.push(`💎 Pending rewards: ${ethers.formatEther(pending)} ETH`);
+                    } catch (e2) {
+                        results.push(`❌ Could not get rewards: ${e.message}`);
+                    }
+                }
+                
+                resultsDiv.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div style="color: red;">Error: ${error.message}</div>`;
+            }
+        }
+
+        // Auto-connect wallet on load
+        window.addEventListener('load', async () => {
+            if (window.ethereum) {
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    console.log('Wallet connected');
+                } catch (error) {
+                    console.error('Failed to connect wallet:', error);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
