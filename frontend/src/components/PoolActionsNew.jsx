@@ -137,6 +137,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     // Re-fetch everything
     const provider = externalProvider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null)
     if (!provider) {
+      console.warn('No provider available for NFT fetching')
       setWalletLoading(false)
       setReceiptLoading(false)
       setPoolLoading(false)
@@ -146,23 +147,28 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     let addr = null
     if (window.ethereum) {
       try {
-        const signer = await provider.getSigner()
-        addr = await signer.getAddress()
+        // Check if there are accounts available first
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' })
+        if (accounts && accounts.length > 0) {
+          const signer = await provider.getSigner()
+          addr = await signer.getAddress()
+        }
       } catch (e) {
         console.warn('Could not get signer:', e)
       }
     }
     setAddress(addr)
     
-    // If no address, clear everything and return
+    // If no address, clear wallet-specific data but still fetch pool NFTs
     if (!addr) {
       setWalletNFTs([])
       setWalletLoading(false)
       setReceiptNFTs([])
       setReceiptLoading(false)
       setStakedNFTs([])
-      setPoolNFTs([])
-      setPoolLoading(false)
+      
+      // Still fetch pool NFTs even without wallet
+      await fetchPoolNFTs(provider)
       return
     }
 
@@ -394,12 +400,16 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
 
   const fetchPoolNFTs = async (provider) => {
     try {
+      console.log('🏊 Fetching pool NFTs for pool:', swapPool)
       const poolContract = new ethers.Contract(swapPool, SwapPoolABI, provider)
       const poolTokenIds = await poolContract.getPoolTokens()
+      console.log('🏊 Pool token IDs:', poolTokenIds)
       
       // Get collection address for metadata
       const collectionAddr = await poolContract.nftCollection()
+      console.log('🏊 Collection address:', collectionAddr)
       if (!collectionAddr) {
+        console.warn('🏊 No collection address found')
         setPoolNFTs([])
         setPoolLoading(false)
         return
@@ -480,9 +490,18 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
 
   // Initialize data on mount
   useEffect(() => {
-    refreshNFTs()
-    fetchPendingRewards()
+    if (swapPool) {
+      refreshNFTs()
+      fetchPendingRewards()
+    }
   }, [swapPool, stakeReceipt])
+
+  // Refresh data when external provider changes
+  useEffect(() => {
+    if (swapPool && externalProvider) {
+      refreshNFTs()
+    }
+  }, [externalProvider])
 
   // Fetch rewards periodically (every 30 seconds)
   useEffect(() => {
