@@ -136,7 +136,7 @@ export function TransactionSkeleton({ message = "Processing transaction...", cla
         <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-indigo-500 rounded-full animate-spin"></div>
         <div className="absolute inset-2 w-12 h-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center">
           <svg className="w-6 h-6 text-indigo-500 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15V3m0 12l-4-4m4 4l4-4m5 4v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6m14-4V5a2 2 0 00-2-2H9a2 2 0 00-2 2v6m10 0V9a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" />
           </svg>
         </div>
       </div>
