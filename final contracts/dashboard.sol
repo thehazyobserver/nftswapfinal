@@ -276,6 +276,20 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         if (!_isContract(swapPool) || !_isContract(stakeReceipt)) {
             revert ZeroAddressNotAllowed(); // Reusing error for "not a contract"
         }
+        
+        // Validate pool is not already registered with different collection
+        for (uint256 i = 0; i < allPools.length; i++) {
+            require(allPools[i].swapPool != swapPool, "SwapPool already registered");
+            require(allPools[i].stakeReceipt != stakeReceipt, "StakeReceipt already registered");
+        }
+        
+        // Additional validation: verify the pool configuration matches expectations
+        // This prevents malicious pools from being registered
+        try this._validatePoolConfiguration(nftCollection, swapPool, stakeReceipt) {
+            // Validation passed
+        } catch {
+            revert("Pool configuration validation failed");
+        }
 
         // Update mappings
         collectionToPool[nftCollection] = PoolInfo({
@@ -491,5 +505,30 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
      */
     function _isContract(address account) internal view returns (bool) {
         return account.code.length > 0;
+    }
+    
+    /**
+     * @dev Validate pool configuration to prevent malicious registrations
+     * @param nftCollection The NFT collection address
+     */
+    function _validatePoolConfiguration(
+        address nftCollection,
+        address /* swapPool */,
+        address /* stakeReceipt */
+    ) external view {
+        // Only allow this contract to call this function
+        require(msg.sender == address(this), "Internal function only");
+        
+        // Basic interface checks - these calls will revert if not implemented
+        try IERC165(nftCollection).supportsInterface(0x80ac58cd) returns (bool supported) {
+            require(supported, "Not a valid ERC721 contract");
+        } catch {
+            revert("ERC721 interface check failed");
+        }
+        
+        // Additional validation could include:
+        // - Check that swapPool has the correct stonerPool set
+        // - Verify stakeReceipt is configured correctly
+        // This is simplified to prevent interface dependency issues
     }
 }

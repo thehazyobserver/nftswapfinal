@@ -199,6 +199,8 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     mapping(uint256 => StakeInfo) public stakeInfos;
     // user => tokenIds
     mapping(address => uint256[]) public stakedTokens;
+    // tokenId => index in stakedTokens array for efficient removal
+    mapping(uint256 => uint256) public stakedTokenIndex;
     // tokenId => is staked
     mapping(uint256 => bool) public isStaked;
     // tokenId => staker (legacy/simple lookup)
@@ -288,7 +290,11 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         // Mark stake
         isStaked[tokenId] = true;
         stakerOf[tokenId] = msg.sender;
+        
+        // Add to user's staked tokens with index tracking for efficient removal
+        uint256 index = stakedTokens[msg.sender].length;
         stakedTokens[msg.sender].push(tokenId);
+        stakedTokenIndex[tokenId] = index;
 
         // Timestamp analytics (lightweight)
         stakeInfos[tokenId] = StakeInfo({ staker: msg.sender, stakedAt: block.timestamp, active: true });
@@ -586,14 +592,21 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     }
 
     function _removeFromArray(uint256[] storage array, uint256 tokenId) internal {
-        uint256 len = array.length;
-        for (uint256 i = 0; i < len; ++i) {
-            if (array[i] == tokenId) {
-                array[i] = array[len - 1];
-                array.pop();
-                return;
-            }
+        uint256 index = stakedTokenIndex[tokenId];
+        uint256 lastIndex = array.length - 1;
+        
+        require(index < array.length, "Invalid token index");
+        require(array[index] == tokenId, "Token index mismatch");
+        
+        // If not the last element, swap with last element
+        if (index != lastIndex) {
+            uint256 lastTokenId = array[lastIndex];
+            array[index] = lastTokenId;
+            stakedTokenIndex[lastTokenId] = index;
         }
+        
+        array.pop();
+        delete stakedTokenIndex[tokenId];
     }
 
     function _checkForDuplicates(uint256[] calldata tokenIds) internal pure {

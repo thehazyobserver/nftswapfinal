@@ -282,13 +282,23 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         external
         whenNotPaused
         onlyInitialized
+        nonReentrant
         updateReward(msg.sender)
     {
-        // Transfer NFT to contract
+        require(tokenId != 0, "SwapPool: Invalid token ID");
+        require(msg.sender != address(0), "SwapPool: Invalid sender");
+        
+        // Create new pool slot atomically to prevent race conditions
+        uint256 slotId = nextSlotId;
+        nextSlotId = slotId + 1;
+        
+        // Validate slot is not already used (double-check for safety)
+        require(poolSlots[slotId].originalStaker == address(0), "SwapPool: Slot already exists");
+        
+        // Transfer NFT to contract (this can revert safely before state changes)
         IERC721(nftCollection).transferFrom(msg.sender, address(this), tokenId);
         
-        // Create new pool slot
-        uint256 slotId = nextSlotId++;
+        // Mint receipt token
         uint256 receiptTokenId = IReceiptContract(receiptContract).mint(msg.sender, slotId);
         
         // Add to pool tokens (available for swapping)
@@ -315,6 +325,7 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         external
         whenNotPaused
         onlyInitialized
+        nonReentrant
         updateReward(msg.sender)
     {
         uint256 n = tokenIds.length;
@@ -328,12 +339,19 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
         for (uint256 i = 0; i < n; ++i) {
             uint256 tokenId = tokenIds[i];
+            require(tokenId != 0, "SwapPool: Invalid token ID");
+            
+            // Create new pool slot atomically
+            uint256 slotId = nextSlotId;
+            nextSlotId = slotId + 1;
+            
+            // Validate slot is not already used
+            require(poolSlots[slotId].originalStaker == address(0), "SwapPool: Slot already exists");
             
             // Transfer NFT to contract
             IERC721(nftCollection).transferFrom(msg.sender, address(this), tokenId);
             
-            // Create new pool slot
-            uint256 slotId = nextSlotId++;
+            // Mint receipt token
             uint256 receiptTokenId = IReceiptContract(receiptContract).mint(msg.sender, slotId);
             
             // Add to pool tokens
@@ -366,6 +384,12 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         nonReentrant
         updateReward(address(0))
     {
+        require(tokenIdIn != 0, "SwapPool: Invalid token ID");
+        require(msg.sender != address(0), "SwapPool: Invalid sender");
+        require(IERC721(nftCollection).ownerOf(tokenIdIn) == msg.sender, "SwapPool: Not token owner");
+        require(IERC721(nftCollection).isApprovedForAll(msg.sender, address(this)) || 
+                IERC721(nftCollection).getApproved(tokenIdIn) == address(this), "SwapPool: Token not approved");
+        
         if (poolTokens.length == 0) revert NoTokensAvailable();
         if (msg.value != swapFeeInWei) revert IncorrectFee();
 
@@ -494,7 +518,10 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         // Find current token in this slot (might not be the original!)
         uint256 currentTokenId = _getCurrentTokenForSlot(slotId);
         
-        // Remove from pool
+        // Validate NFT exists and we own it before any state changes
+        require(IERC721(nftCollection).ownerOf(currentTokenId) == address(this), "SwapPool: Contract doesn't own NFT");
+        
+        // Remove from pool first (this validates the token exists in pool)
         _removeTokenFromPool(currentTokenId);
         
         // Update slot state
@@ -507,8 +534,10 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         // Clean up mappings
         delete receiptToSlot[receiptTokenId];
         
-        // Burn receipt and return current token
+        // Burn receipt token first (this can revert safely)
         IReceiptContract(receiptContract).burn(receiptTokenId);
+        
+        // Transfer NFT last (most likely to fail, so do it after state cleanup)
         IERC721(nftCollection).safeTransferFrom(address(this), msg.sender, currentTokenId);
 
         emit Unstaked(msg.sender, currentTokenId, slotId, receiptTokenId);
@@ -559,6 +588,10 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // -------------------- INTERNAL HELPERS --------------------
     function _replaceTokenInPool(uint256 oldTokenId, uint256 newTokenId) internal {
         uint256 tokenIndex = tokenIndexInPool[oldTokenId];
+        require(tokenIndex < poolTokens.length, "SwapPool: Invalid token index");
+        require(poolTokens[tokenIndex] == oldTokenId, "SwapPool: Token index mismatch");
+        require(newTokenId != 0, "SwapPool: Invalid new token ID");
+        
         poolTokens[tokenIndex] = newTokenId;
         
         // Update mapping
@@ -567,11 +600,20 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     }
     
     function _removeTokenFromPool(uint256 tokenId) internal {
-        uint256 tokenIndex = tokenIndexInPool[tokenId];
-        uint256 lastTokenId = poolTokens[poolTokens.length - 1];
+        require(poolTokens.length > 0, "SwapPool: Pool is empty");
         
-        poolTokens[tokenIndex] = lastTokenId;
-        tokenIndexInPool[lastTokenId] = tokenIndex;
+        uint256 tokenIndex = tokenIndexInPool[tokenId];
+        require(tokenIndex < poolTokens.length, "SwapPool: Invalid token index");
+        require(poolTokens[tokenIndex] == tokenId, "SwapPool: Token index mismatch");
+        
+        uint256 lastIndex = poolTokens.length - 1;
+        
+        // Only swap if not the last element
+        if (tokenIndex != lastIndex) {
+            uint256 lastTokenId = poolTokens[lastIndex];
+            poolTokens[tokenIndex] = lastTokenId;
+            tokenIndexInPool[lastTokenId] = tokenIndex;
+        }
         
         poolTokens.pop();
         delete tokenIndexInPool[tokenId];
