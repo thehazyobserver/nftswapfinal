@@ -38,8 +38,12 @@ export default function PoolList() {
 
   // Check if user has stakes in any pools
   const checkUserStakes = async (poolsToCheck, providerToUse) => {
-    if (!address || !providerToUse) return
+    if (!address || !providerToUse) {
+      console.log('🎯 CheckUserStakes: No address or provider:', { address, hasProvider: !!providerToUse })
+      return
+    }
     
+    console.log(`🎯 Checking user stakes for ${poolsToCheck.length} pools for address ${address}`)
     const stakedPools = new Set()
     
     try {
@@ -52,8 +56,10 @@ export default function PoolList() {
             providerToUse
           )
           const balance = await receiptContract.balanceOf(address)
+          console.log(`🎯 Pool ${pool.swapPool.slice(0, 8)}: balance = ${balance.toString()}`)
           if (Number(balance) > 0) {
             stakedPools.add(pool.swapPool)
+            console.log(`✅ Added staked pool: ${pool.swapPool.slice(0, 8)}`)
           }
         } catch (err) {
           console.warn(`Failed to check stakes for pool ${pool.swapPool}:`, err)
@@ -63,6 +69,7 @@ export default function PoolList() {
       console.warn('Failed to check user stakes:', err)
     }
     
+    console.log(`🎯 Total staked pools found: ${stakedPools.size}`, Array.from(stakedPools))
     setUserStakedPools(stakedPools)
   }
 
@@ -224,7 +231,10 @@ export default function PoolList() {
       
       // Check user stakes if wallet is connected
       if (address) {
+        console.log('🎯 About to check user stakes, address:', address)
         await checkUserStakes(mapped, provider)
+      } else {
+        console.log('🎯 No address available, skipping user stakes check')
       }
     } catch (err) {
       console.error('Failed to fetch pools', err)
