@@ -18,11 +18,12 @@ const collections = {
     description: 'Boat NFT collection'
   },
 
-  // MEME RUNNER Collection - Your swap pool
-  '0x4C6D6010b75f5Da44598B74111fAEa9713dDd6da': {
-    name: 'MEME RUNNER',
-    fallback: '/images/collections/meme-runner.png', // Local image
-    description: 'Luxury yacht collection for meme enthusiasts',
+  // BOAT MONEY Collection - NFT Collection Address (not swap pool address)
+  '0x75f5EE19Bc352d19B1791684faDf23b948EDaBA3': {
+    name: 'BOAT MONEY',
+    image: 'https://i.imgur.com/oZQQQQQ.jpg', // You can replace with actual boat image URL
+    fallback: '/images/collections/boat-money.png',
+    description: 'Luxury yacht collection for boat enthusiasts',
     customGradient: 'from-blue-400 to-cyan-600' // Ocean-themed gradient
   },
 

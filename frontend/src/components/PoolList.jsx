@@ -659,7 +659,7 @@ export default function PoolList() {
                   </div>
                   <div className="flex justify-between">
                     <span>Created:</span>
-                    <span>{new Date(Number(p.createdAt)).toLocaleDateString()}</span>
+                    <span>{p.createdAt && Number(p.createdAt) > 0 ? new Date(Number(p.createdAt) * 1000).toLocaleDateString() : 'Unknown'}</span>
                   </div>
                 </div>
 
