@@ -797,6 +797,15 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           console.log(`🧾 Added receipt token:`, tokenData)
         } catch (error) {
           console.error(`🧾 Error fetching receipt token ${i}:`, error.message)
+          
+          // Still create the token even if metadata fetching fails
+          const tokenData = {
+            tokenId: receiptTokenId.toString(),
+            originalTokenId: originalTokenId.toString(),
+            image: '' // No image available
+          }
+          tokens.push(tokenData)
+          console.log(`🧾 Added receipt token (no metadata):`, tokenData)
         }
       }
       
