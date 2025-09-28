@@ -417,16 +417,50 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       const signer = await getSigner()
       const contract = new ethers.Contract(swapPool, SwapPoolABI, signer)
       
+      // Debug: Check the receipt tokens and their mappings before unstaking
+      console.log(`🔍 Debugging unstake for receipt tokens:`, selectedTokens)
+      
+      for (const receiptTokenId of selectedTokens) {
+        try {
+          console.log(`🔍 Checking receipt token ${receiptTokenId}...`)
+          const slotId = await contract.receiptToSlot(receiptTokenId)
+          console.log(`🔍 Receipt ${receiptTokenId} maps to slot ${slotId}`)
+          
+          const slotInfo = await contract.poolSlots(slotId)
+          console.log(`🔍 Slot ${slotId} info:`, {
+            originalStaker: slotInfo.originalStaker,
+            stakedAt: slotInfo.stakedAt.toString(),
+            active: slotInfo.active,
+            receiptTokenId: slotInfo.receiptTokenId.toString()
+          })
+          
+          if (!slotInfo.active) {
+            console.warn(`🔍 ⚠️ Slot ${slotId} is not active!`)
+          }
+          
+          if (slotInfo.receiptTokenId.toString() !== receiptTokenId.toString()) {
+            console.warn(`🔍 ⚠️ Slot receipt mismatch! Slot contains ${slotInfo.receiptTokenId}, trying to unstake ${receiptTokenId}`)
+          }
+          
+        } catch (debugError) {
+          console.error(`🔍 ❌ Failed to debug receipt ${receiptTokenId}:`, debugError.message)
+        }
+      }
+      
       setStatus(`Unstaking ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}...`)
       
       let tx
       if (selectedTokens.length > 1 && contract.unstakeNFTBatch) {
+        console.log(`🔄 Calling unstakeNFTBatch with:`, selectedTokens)
         tx = await contract.unstakeNFTBatch(selectedTokens)
       } else {
+        console.log(`🔄 Calling unstakeNFT with:`, selectedTokens[0])
         tx = await contract.unstakeNFT(selectedTokens[0])
       }
       
+      console.log(`🔄 Unstake transaction sent:`, tx.hash)
       await tx.wait()
+      console.log(`🔄 Unstake transaction confirmed!`)
       setStatus(`✅ Successfully unstaked ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}!`)
       
       // Refresh data
@@ -763,25 +797,53 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
         "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)"
       ], provider)
       
-      // Get pool contract to fetch original NFT data
-      const poolContract = new ethers.Contract(swapPool, [
-        "function getPoolTokens() view returns (uint256[])",
-        "function nftCollection() view returns (address)",
-        "function receiptToSlot(uint256) view returns (uint256)"
-      ], provider)
+      // Get pool contract to query staking events and original NFT data
+      const poolContract = new ethers.Contract(swapPool, SwapPoolABI, provider)
       
       const balance = await receiptContract.balanceOf(addr)
       console.log(`🧾 Receipt balance for ${addr}: ${balance.toString()}`)
       
-      // Get pool tokens and collection address
-      const poolTokens = await poolContract.getPoolTokens()
+      if (balance.toString() === '0') {
+        console.log(`🧾 No receipt tokens found for ${addr}`)
+        setReceiptNFTs([])
+        return
+      }
+      
+      // Get collection address
       const collectionAddress = await poolContract.nftCollection()
-      console.log(`🧾 Pool has ${poolTokens.length} tokens, collection: ${collectionAddress}`)
+      console.log(`🧾 Collection address: ${collectionAddress}`)
       
       // Create NFT contract for metadata
       const nftContract = new ethers.Contract(collectionAddress, [
         "function tokenURI(uint256) view returns (string)"
       ], provider)
+      
+      // Build mapping of receipt tokens to original NFT token IDs using events
+      console.log(`🧾 Querying Staked events to build receipt-to-original mapping...`)
+      
+      // Create mapping from receipt token ID to original NFT token ID
+      const receiptToOriginal = new Map()
+      
+      try {
+        // Query recent Staked events for this user to get original token IDs
+        // Start from a recent block to avoid querying too much history
+        const currentBlock = await provider.getBlockNumber()
+        const fromBlock = Math.max(0, currentBlock - 100000) // Last ~100k blocks
+        
+        console.log(`🧾 Querying Staked events from block ${fromBlock} to ${currentBlock}`)
+        const stakedEventFilter = poolContract.filters.Staked(addr)
+        const stakedEvents = await poolContract.queryFilter(stakedEventFilter, fromBlock, 'latest')
+        console.log(`🧾 Found ${stakedEvents.length} Staked events for ${addr}`)
+        
+        for (const event of stakedEvents) {
+          const { tokenId, receiptTokenId } = event.args
+          receiptToOriginal.set(receiptTokenId.toString(), tokenId.toString())
+          console.log(`🧾 Event mapping: Receipt ${receiptTokenId} → Original NFT ${tokenId}`)
+        }
+      } catch (eventError) {
+        console.warn(`🧾 ⚠️ Failed to query Staked events:`, eventError.message)
+        console.log(`🧾 Will use fallback approach for NFT mapping`)
+      }
       
       const tokens = []
       
@@ -791,110 +853,127 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           const receiptTokenId = await receiptContract.tokenOfOwnerByIndex(addr, i)
           console.log(`🧾 Receipt token ID: ${receiptTokenId.toString()}`)
           
-          // Note: We no longer need pool slot ID, we'll get original token ID directly from the mapping
+          // Get the original NFT token ID from our event mapping
+          let originalNFTTokenId = receiptToOriginal.get(receiptTokenId.toString())
           
-          // Get the actual NFT token ID from the receipt-to-original mapping
-          let originalNFTTokenId = receiptTokenId.toString()
-          let nftImage = ''
-          let nftName = `Staked NFT #${receiptTokenId}`
-          
-          try {
-            // Try using receiptToSlot and poolTokens as fallback approach
-            console.log(`🧾 Trying receiptToSlot approach for receipt ${receiptTokenId}...`)
-            const slotId = await poolContract.receiptToSlot(receiptTokenId)
-            console.log(`🧾 Receipt ${receiptTokenId} maps to slot ${slotId}`)
+          if (!originalNFTTokenId) {
+            console.warn(`🧾 ⚠️ No original NFT mapping found for receipt ${receiptTokenId} in events`)
             
-            if (slotId < poolTokens.length) {
-              originalNFTTokenId = poolTokens[slotId].toString()
-              console.log(`🧾 ✅ Slot ${slotId} contains NFT token ID: ${originalNFTTokenId}`)
+            // Try alternative approach: query the slot directly to get original token info
+            try {
+              console.log(`🧾 🔧 Trying direct slot query for receipt ${receiptTokenId}...`)
+              const slotId = await poolContract.receiptToSlot(receiptTokenId)
+              console.log(`🧾 Receipt ${receiptTokenId} maps to slot ${slotId}`)
               
-              // Fetch NFT metadata using the correct token ID
-              try {
-                console.log(`🧾 Fetching tokenURI for NFT #${originalNFTTokenId}...`)
-                const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
-                console.log(`🧾 ✅ NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
+              const slotInfo = await poolContract.poolSlots(slotId)
+              console.log(`🧾 Slot ${slotId} info:`, {
+                originalStaker: slotInfo.originalStaker,
+                active: slotInfo.active,
+                receiptTokenId: slotInfo.receiptTokenId.toString()
+              })
+              
+              // If this slot is active and matches our receipt, we can trust the mapping
+              if (slotInfo.active && slotInfo.receiptTokenId.toString() === receiptTokenId.toString()) {
+                // Try to find the original token using historical pool state
+                // This is still imperfect but better than using receipt ID
+                const poolTokens = await poolContract.getPoolTokens()
+                if (slotId < poolTokens.length) {
+                  originalNFTTokenId = poolTokens[slotId].toString()
+                  console.log(`🧾 ✅ Using pool token at slot ${slotId}: NFT ${originalNFTTokenId}`)
+                } else {
+                  console.warn(`🧾 ⚠️ Slot ${slotId} out of bounds, using receipt ID as fallback`)
+                  originalNFTTokenId = receiptTokenId.toString()
+                }
+              } else {
+                console.warn(`🧾 ⚠️ Slot info doesn't match receipt, using receipt ID as fallback`)
+                originalNFTTokenId = receiptTokenId.toString()
+              }
+            } catch (slotError) {
+              console.warn(`🧾 ⚠️ Slot query failed, using receipt ID as final fallback:`, slotError.message)
+              originalNFTTokenId = receiptTokenId.toString()
+            }
+          } else {
+            console.log(`🧾 ✅ Found original NFT mapping from events: Receipt ${receiptTokenId} → NFT ${originalNFTTokenId}`)
+          }
+          
+          let nftImage = ''
+          let nftName = `Staked NFT #${originalNFTTokenId}`
+          
+          // Fetch NFT metadata using the original token ID
+          try {
+            console.log(`🧾 Fetching tokenURI for original NFT #${originalNFTTokenId}...`)
+            const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
+            console.log(`🧾 ✅ NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
+            
+            if (tokenURI && tokenURI.trim() !== '') {
+              let metadataUrl = tokenURI
+              if (tokenURI.startsWith('ipfs://')) {
+                metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                console.log(`🧾 Converted IPFS URL to: ${metadataUrl}`)
+              }
+              
+              console.log(`🧾 Fetching metadata from: ${metadataUrl}`)
+              const response = await fetch(metadataUrl)
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+              }
+              
+              const metadata = await response.json()
+              console.log(`🧾 ✅ Fetched metadata for #${originalNFTTokenId}:`, metadata)
+              
+              if (metadata.image) {
+                nftImage = metadata.image
+                if (nftImage.startsWith('ipfs://')) {
+                  nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+                console.log(`🧾 ✅ Image URL: ${nftImage}`)
+              }
+              
+              if (metadata.name) {
+                nftName = metadata.name
+                console.log(`🧾 ✅ Name: ${nftName}`)
+              }
+            } else {
+              console.warn(`🧾 ⚠️ Empty or invalid tokenURI for NFT #${originalNFTTokenId}`)
+            }
+          } catch (metadataError) {
+            console.error(`🧾 ❌ Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError.message)
+            // Try fallback with receipt token ID
+            try {
+              console.log(`🧾 🔧 Attempting fallback: using receipt token ID ${receiptTokenId} for metadata`)
+              const fallbackTokenURI = await nftContract.tokenURI(receiptTokenId)
+              
+              if (fallbackTokenURI && fallbackTokenURI.trim() !== '') {
+                console.log(`🧾 ✅ Fallback tokenURI found for receipt #${receiptTokenId}`)
                 
-                if (tokenURI && tokenURI.trim() !== '') {
-                  let metadataUrl = tokenURI
-                  if (tokenURI.startsWith('ipfs://')) {
-                    metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                    console.log(`🧾 Converted IPFS URL to: ${metadataUrl}`)
-                  }
-                  
-                  console.log(`🧾 Fetching metadata from: ${metadataUrl}`)
-                  const response = await fetch(metadataUrl)
-                  
-                  if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-                  }
-                  
+                let metadataUrl = fallbackTokenURI
+                if (fallbackTokenURI.startsWith('ipfs://')) {
+                  metadataUrl = fallbackTokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                }
+                
+                const response = await fetch(metadataUrl)
+                if (response.ok) {
                   const metadata = await response.json()
-                  console.log(`🧾 ✅ Fetched metadata for #${originalNFTTokenId}:`, metadata)
+                  console.log(`🧾 ✅ Fallback metadata for receipt #${receiptTokenId}:`, metadata)
                   
                   if (metadata.image) {
                     nftImage = metadata.image
                     if (nftImage.startsWith('ipfs://')) {
                       nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
                     }
-                    console.log(`🧾 ✅ Image URL: ${nftImage}`)
+                    console.log(`🧾 ✅ Fallback image URL: ${nftImage}`)
                   }
                   
                   if (metadata.name) {
                     nftName = metadata.name
-                    console.log(`🧾 ✅ Name: ${nftName}`)
+                    console.log(`🧾 ✅ Fallback name: ${nftName}`)
                   }
-                } else {
-                  console.warn(`🧾 ⚠️ Empty or invalid tokenURI for NFT #${originalNFTTokenId}`)
                 }
-              } catch (metadataError) {
-                console.error(`🧾 ❌ Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError)
               }
-            } else {
-              console.warn(`🧾 ⚠️ Slot ${slotId} is out of bounds for poolTokens array (length: ${poolTokens.length})`)
-              // For out-of-bounds slots, try to use the receipt token ID as the original token ID
-              // This is a fallback for cases where the mapping might be inconsistent
-              try {
-                console.log(`🧾 🔧 Attempting fallback: using receipt token ID ${receiptTokenId} as original token ID`)
-                const fallbackTokenURI = await nftContract.tokenURI(receiptTokenId)
-                
-                if (fallbackTokenURI && fallbackTokenURI.trim() !== '') {
-                  originalNFTTokenId = receiptTokenId.toString()
-                  console.log(`🧾 ✅ Fallback successful: NFT token URI for #${originalNFTTokenId}: ${fallbackTokenURI}`)
-                  
-                  let metadataUrl = fallbackTokenURI
-                  if (fallbackTokenURI.startsWith('ipfs://')) {
-                    metadataUrl = fallbackTokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                  
-                  const response = await fetch(metadataUrl)
-                  if (response.ok) {
-                    const metadata = await response.json()
-                    console.log(`🧾 ✅ Fallback metadata for #${originalNFTTokenId}:`, metadata)
-                    
-                    if (metadata.image) {
-                      nftImage = metadata.image
-                      if (nftImage.startsWith('ipfs://')) {
-                        nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                      }
-                      console.log(`🧾 ✅ Fallback image URL: ${nftImage}`)
-                    }
-                    
-                    if (metadata.name) {
-                      nftName = metadata.name
-                      console.log(`🧾 ✅ Fallback name: ${nftName}`)
-                    }
-                  }
-                } else {
-                  console.warn(`🧾 ⚠️ Fallback failed: no tokenURI for receipt token ${receiptTokenId}`)
-                }
-              } catch (fallbackError) {
-                console.warn(`🧾 ⚠️ Fallback approach failed for receipt ${receiptTokenId}:`, fallbackError.message)
-                // Keep default values (originalNFTTokenId = receiptTokenId, empty image, generic name)
-                originalNFTTokenId = receiptTokenId.toString()
-              }
+            } catch (fallbackError) {
+              console.warn(`🧾 ⚠️ Fallback approach also failed for receipt ${receiptTokenId}:`, fallbackError.message)
             }
-          } catch (poolError) {
-            console.error(`🧾 ❌ Failed to get slot ID for receipt ${receiptTokenId}:`, poolError)
           }
           
           const tokenData = {
@@ -903,7 +982,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
             image: nftImage,
             isReceiptToken: true,
             name: nftName,
-            description: `Receipt for ${nftName} (Token #${originalNFTTokenId})`
+            description: `Receipt for ${nftName} (Original Token #${originalNFTTokenId})`
           }
           tokens.push(tokenData)
           console.log(`🧾 Added receipt token with NFT data:`, tokenData)
