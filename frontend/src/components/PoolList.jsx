@@ -260,7 +260,7 @@ export default function PoolList() {
             
             totalRewards = totalRewards + pendingRewards
           } catch (error) {
-            console.warn(`Failed to fetch rewards for pool ${pool.swapPool}:`, error)
+            // Silently handle reward fetching errors - some contracts may not support rewards
           }
         }
       }

@@ -806,7 +806,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       console.log('🏊 Fetching pool NFTs for pool:', swapPool)
       const poolContract = new ethers.Contract(swapPool, SwapPoolABI, provider)
       const poolTokenIds = await poolContract.getPoolTokens()
-      console.log('🏊 Pool token IDs:', poolTokenIds)
+      // Debug: Pool token IDs fetched
       
       // Get collection address for metadata
       const collectionAddr = await poolContract.nftCollection()
@@ -829,7 +829,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           
           try {
             tokenURI = await nftContract.tokenURI(tokenId)
-            console.log(`🏊 Token ${tokenId} URI:`, tokenURI)
+            // Debug: Token URI fetched
             
             if (tokenURI) {
               // Handle different URI formats
@@ -852,7 +852,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
                     imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')
                   }
                 }
-                console.log(`🏊 Token ${tokenId} image:`, imageUrl)
+                // Debug logging reduced to prevent console spam
               } catch (metadataError) {
                 console.warn(`Failed to fetch metadata for token ${tokenId}:`, metadataError)
               }
@@ -918,7 +918,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           const pending = await poolContract.pendingRewards(account)
           setPendingRewards(ethers.formatEther(pending))
         } catch (pendingError) {
-          console.warn('Both earned() and pendingRewards failed:', { earnedError, pendingError })
+          // Silently handle missing reward functions - this is expected for some contracts
           setPendingRewards('0')
         }
       }
