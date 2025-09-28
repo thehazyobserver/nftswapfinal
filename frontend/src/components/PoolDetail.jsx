@@ -44,7 +44,6 @@ export default function PoolDetail({ pool, collectionName, onClose, provider }) 
             <div className="font-semibold text-base sm:text-lg text-blue-600 dark:text-blue-400 mb-1">Collection: <span className="text-gray-800 dark:text-gray-200">{collectionName || 'Loading...'}</span></div>
             <div className="text-xs text-gray-600 dark:text-gray-400">SwapPool: <span className="font-mono">{pool.swapPool.slice(0, 6)}...{pool.swapPool.slice(-4)}</span></div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Receipt: <span className="font-mono">{pool.stakeReceipt.slice(0, 6)}...{pool.stakeReceipt.slice(-4)}</span></div>
-            <div className="text-xs text-gray-600 dark:text-gray-400">Creator: {pool.creator}</div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Created: {pool.createdAt}</div>
             <div className="text-xs text-gray-600 dark:text-gray-400">Active: {pool.active ? 'Yes' : 'No'}</div>
             <div className="flex items-center gap-2 mt-2">
