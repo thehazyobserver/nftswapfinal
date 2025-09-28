@@ -1219,7 +1219,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
                   Stake NFTs
                 </h3>
                 <p className="text-green-600 dark:text-green-400 leading-relaxed">
-                  Stake your NFTs to earn rewards from swap fees and contribute to pool liquidity. Passive income from your collection.
+                  Stake your NFTs to earn rewards from swap fees and contribute to pool liquidity. Passive rewards from your collection.
                 </p>
               </div>
 
