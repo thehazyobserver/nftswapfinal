@@ -734,8 +734,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       const receiptContract = new ethers.Contract(stakeReceipt, [
         "function balanceOf(address) view returns (uint256)", 
         "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", 
-        "function tokenURI(uint256) view returns (string)",
-        "function receiptToOriginalToken(uint256) view returns (uint256)"
+        "function getPoolSlotId(uint256) view returns (uint256)"
       ], provider)
       
       const balance = await receiptContract.balanceOf(addr)
@@ -748,64 +747,33 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           const receiptTokenId = await receiptContract.tokenOfOwnerByIndex(addr, i)
           console.log(`🧾 Receipt token ID: ${receiptTokenId.toString()}`)
           
-          const originalTokenId = await receiptContract.receiptToOriginalToken(receiptTokenId)
-          console.log(`🧾 Original token ID: ${originalTokenId.toString()}`)
-          
-          let tokenURI = ''
-          let imageUrl = ''
-          
+          // Get pool slot ID (this is what the new contract uses)
+          let poolSlotId
           try {
-            tokenURI = await receiptContract.tokenURI(receiptTokenId)
-            console.log(`🧾 Token URI: ${tokenURI}`)
-            
-            if (tokenURI) {
-              // Handle different URI formats
-              let metadataUrl = tokenURI
-              
-              // Handle IPFS URIs
-              if (tokenURI.startsWith('ipfs://')) {
-                metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
-              }
-              
-              // Fetch metadata JSON
-              try {
-                const response = await fetch(metadataUrl)
-                const metadata = await response.json()
-                
-                if (metadata.image) {
-                  imageUrl = metadata.image
-                  // Handle IPFS image URLs
-                  if (imageUrl.startsWith('ipfs://')) {
-                    imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                }
-                console.log(`🧾 Image URL: ${imageUrl}`)
-              } catch (metadataError) {
-                console.warn(`🧾 Failed to fetch metadata for ${receiptTokenId}:`, metadataError.message)
-              }
-            }
-          } catch (tokenError) {
-            console.warn(`🧾 Failed to get tokenURI for ${receiptTokenId}:`, tokenError.message)
+            poolSlotId = await receiptContract.getPoolSlotId(receiptTokenId)
+            console.log(`🧾 Pool slot ID: ${poolSlotId.toString()}`)
+          } catch (error) {
+            console.log(`🧾 getPoolSlotId failed, using receiptTokenId as fallback`)
+            poolSlotId = receiptTokenId
           }
           
+          // Skip metadata fetching entirely - contract has no baseURI set
+          // Create receipt token with identifiable information
           const tokenData = {
             tokenId: receiptTokenId.toString(),
-            originalTokenId: originalTokenId.toString(),
-            image: imageUrl || ''
+            originalTokenId: poolSlotId.toString(),
+            poolSlotId: poolSlotId.toString(),
+            image: '', // No image - will use fallback display
+            isReceiptToken: true,
+            name: `Staked NFT #${poolSlotId}`,
+            description: `Receipt for staked NFT from pool slot ${poolSlotId}`
           }
           tokens.push(tokenData)
           console.log(`🧾 Added receipt token:`, tokenData)
+          
         } catch (error) {
           console.error(`🧾 Error fetching receipt token ${i}:`, error.message)
-          
-          // Still create the token even if metadata fetching fails
-          const tokenData = {
-            tokenId: receiptTokenId.toString(),
-            originalTokenId: originalTokenId.toString(),
-            image: '' // No image available
-          }
-          tokens.push(tokenData)
-          console.log(`🧾 Added receipt token (no metadata):`, tokenData)
+          // Continue to next token instead of breaking
         }
       }
       

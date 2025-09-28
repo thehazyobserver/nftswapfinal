@@ -388,7 +388,14 @@ export default function StakingInterface({
                     }}
                     disabled={loading}
                   >
-                    <NFTTokenImage image={nft.image} tokenId={nft.tokenId} size={64} />
+                    <NFTTokenImage 
+                      image={nft.image} 
+                      tokenId={nft.tokenId} 
+                      size={64} 
+                      isReceiptToken={nft.isReceiptToken}
+                      poolSlotId={nft.poolSlotId}
+                      name={nft.name}
+                    />
                     <div className="text-xs text-center mt-2 font-mono text-yellow-700 dark:text-yellow-300">
                       #{nft.tokenId}
                     </div>
