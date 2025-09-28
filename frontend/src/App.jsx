@@ -33,15 +33,24 @@ export default function App() {
         <div className="max-w-6xl mx-auto p-2 sm:p-4 md:p-6 w-full">
           <header className="flex flex-col sm:flex-row items-center justify-between mb-8 py-6 px-4 sm:px-6 rounded-2xl shadow-xl bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg gap-4 border border-gray-200 dark:border-gray-700 animate-slide-up">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 via-blue-500 to-teal-500 rounded-xl shadow-lg flex items-center justify-center group-hover:shadow-glow transition-all duration-300">
-                <span className="text-white font-bold text-xl">🏊</span>
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 via-blue-500 to-teal-500 rounded-xl shadow-lg flex items-center justify-center group-hover:shadow-glow transition-all duration-300 overflow-hidden">
+                <img 
+                  src="/pass-the-jpeg-logo.png" 
+                  alt="PASS THE JPEG Logo" 
+                  className="w-8 h-8 object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'block';
+                  }}
+                />
+                <span className="text-white font-bold text-xl hidden">🤝</span>
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-indigo-600 via-blue-500 to-teal-400 bg-clip-text text-transparent">
-                  NFT Swap Dashboard
+                  PASS THE JPEG
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 hidden sm:block">
-                  Decentralized NFT trading on Sonic Network
+                  SWAP YOUR NFTS WITH NFTS IN THE SWAP POOLS
                 </p>
               </div>
             </div>
