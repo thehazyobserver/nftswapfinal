@@ -50,19 +50,34 @@ export default function PoolList() {
       // Check each pool to see if user has staked NFTs (receipt tokens)
       for (const pool of poolsToCheck) {
         try {
+          console.log(`🎯 Checking pool: ${pool.swapPool.slice(0, 8)}, receipt: ${pool.stakeReceipt.slice(0, 8)}`)
           const receiptContract = new ethers.Contract(
             pool.stakeReceipt, 
-            ["function balanceOf(address) view returns (uint256)"], 
+            [
+              "function balanceOf(address) view returns (uint256)",
+              "function balanceOf(address owner) view returns (uint256)"
+            ], 
             providerToUse
           )
           const balance = await receiptContract.balanceOf(address)
           console.log(`🎯 Pool ${pool.swapPool.slice(0, 8)}: balance = ${balance.toString()}`)
           if (Number(balance) > 0) {
             stakedPools.add(pool.swapPool)
-            console.log(`✅ Added staked pool: ${pool.swapPool.slice(0, 8)}`)
+            console.log(`✅ Added staked pool: ${pool.swapPool.slice(0, 8)} (balance: ${balance.toString()})`)
           }
         } catch (err) {
-          console.warn(`Failed to check stakes for pool ${pool.swapPool}:`, err)
+          console.warn(`❌ Failed to check stakes for pool ${pool.swapPool.slice(0, 8)}:`, err.message)
+          // Try alternative approach - check if contract exists
+          try {
+            const code = await providerToUse.getCode(pool.stakeReceipt)
+            if (code === '0x') {
+              console.warn(`❌ Receipt contract ${pool.stakeReceipt.slice(0, 8)} has no code`)
+            } else {
+              console.warn(`❌ Receipt contract ${pool.stakeReceipt.slice(0, 8)} exists but balanceOf failed`)
+            }
+          } catch (codeErr) {
+            console.warn(`❌ Could not check code for ${pool.stakeReceipt.slice(0, 8)}:`, codeErr.message)
+          }
         }
       }
     } catch (err) {
@@ -345,6 +360,14 @@ export default function PoolList() {
     }
     // eslint-disable-next-line
   }, [provider, factoryAddress]);
+
+  // Check user stakes when address changes
+  useEffect(() => {
+    if (address && provider && pools.length > 0) {
+      console.log('🎯 Address changed, re-checking user stakes:', address)
+      checkUserStakes(pools, provider)
+    }
+  }, [address, provider, pools])
 
   // Calculate rewards when pools or user stakes change
   useEffect(() => {
