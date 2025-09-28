@@ -767,7 +767,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       const poolContract = new ethers.Contract(swapPool, [
         "function getPoolTokens() view returns (uint256[])",
         "function nftCollection() view returns (address)",
-        "function receiptToOriginalToken(uint256) view returns (uint256)"
+        "function receiptToSlot(uint256) view returns (uint256)"
       ], provider)
       
       const balance = await receiptContract.balanceOf(addr)
@@ -799,55 +799,61 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           let nftName = `Staked NFT #${receiptTokenId}`
           
           try {
-            // Use receiptToOriginalToken mapping to get the original NFT token ID
-            console.log(`🧾 Calling poolContract.receiptToOriginalToken(${receiptTokenId})...`)
-            const originalTokenId = await poolContract.receiptToOriginalToken(receiptTokenId)
-            originalNFTTokenId = originalTokenId.toString()
-            console.log(`🧾 ✅ Receipt ${receiptTokenId} maps to original NFT token ID: ${originalNFTTokenId}`)
+            // Try using receiptToSlot and poolTokens as fallback approach
+            console.log(`🧾 Trying receiptToSlot approach for receipt ${receiptTokenId}...`)
+            const slotId = await poolContract.receiptToSlot(receiptTokenId)
+            console.log(`🧾 Receipt ${receiptTokenId} maps to slot ${slotId}`)
             
-            // Fetch NFT metadata using the correct token ID
-            try {
-              console.log(`🧾 Fetching tokenURI for NFT #${originalNFTTokenId}...`)
-              const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
-              console.log(`🧾 ✅ NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
+            if (slotId < poolTokens.length) {
+              originalNFTTokenId = poolTokens[slotId].toString()
+              console.log(`🧾 ✅ Slot ${slotId} contains NFT token ID: ${originalNFTTokenId}`)
               
-              if (tokenURI && tokenURI.trim() !== '') {
-                let metadataUrl = tokenURI
-                if (tokenURI.startsWith('ipfs://')) {
-                  metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  console.log(`🧾 Converted IPFS URL to: ${metadataUrl}`)
-                }
+              // Fetch NFT metadata using the correct token ID
+              try {
+                console.log(`🧾 Fetching tokenURI for NFT #${originalNFTTokenId}...`)
+                const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
+                console.log(`🧾 ✅ NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
                 
-                console.log(`🧾 Fetching metadata from: ${metadataUrl}`)
-                const response = await fetch(metadataUrl)
-                
-                if (!response.ok) {
-                  throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-                }
-                
-                const metadata = await response.json()
-                console.log(`🧾 ✅ Fetched metadata for #${originalNFTTokenId}:`, metadata)
-                
-                if (metadata.image) {
-                  nftImage = metadata.image
-                  if (nftImage.startsWith('ipfs://')) {
-                    nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                if (tokenURI && tokenURI.trim() !== '') {
+                  let metadataUrl = tokenURI
+                  if (tokenURI.startsWith('ipfs://')) {
+                    metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    console.log(`🧾 Converted IPFS URL to: ${metadataUrl}`)
                   }
-                  console.log(`🧾 ✅ Image URL: ${nftImage}`)
+                  
+                  console.log(`🧾 Fetching metadata from: ${metadataUrl}`)
+                  const response = await fetch(metadataUrl)
+                  
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+                  }
+                  
+                  const metadata = await response.json()
+                  console.log(`🧾 ✅ Fetched metadata for #${originalNFTTokenId}:`, metadata)
+                  
+                  if (metadata.image) {
+                    nftImage = metadata.image
+                    if (nftImage.startsWith('ipfs://')) {
+                      nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                    console.log(`🧾 ✅ Image URL: ${nftImage}`)
+                  }
+                  
+                  if (metadata.name) {
+                    nftName = metadata.name
+                    console.log(`🧾 ✅ Name: ${nftName}`)
+                  }
+                } else {
+                  console.warn(`🧾 ⚠️ Empty or invalid tokenURI for NFT #${originalNFTTokenId}`)
                 }
-                
-                if (metadata.name) {
-                  nftName = metadata.name
-                  console.log(`🧾 ✅ Name: ${nftName}`)
-                }
-              } else {
-                console.warn(`🧾 ⚠️ Empty or invalid tokenURI for NFT #${originalNFTTokenId}`)
+              } catch (metadataError) {
+                console.error(`🧾 ❌ Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError)
               }
-            } catch (metadataError) {
-              console.error(`🧾 ❌ Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError)
+            } else {
+              console.warn(`🧾 ⚠️ Slot ${slotId} is out of bounds for poolTokens array (length: ${poolTokens.length})`)
             }
           } catch (poolError) {
-            console.error(`🧾 ❌ Failed to get original token ID for receipt ${receiptTokenId}:`, poolError)
+            console.error(`🧾 ❌ Failed to get slot ID for receipt ${receiptTokenId}:`, poolError)
           }
           
           const tokenData = {
