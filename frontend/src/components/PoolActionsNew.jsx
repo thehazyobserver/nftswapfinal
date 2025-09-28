@@ -25,6 +25,8 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   const [contractInfo, setContractInfo] = useState(null)
   const [pendingRewards, setPendingRewards] = useState('0')
   const [swapFee, setSwapFee] = useState(null)
+  const [stonerShare, setStonerShare] = useState(null)
+  const [stakerShare, setStakerShare] = useState(null)
 
   // All the existing functions from PoolActions would be imported here
   // For brevity, I'll show the key ones
@@ -1028,9 +1030,21 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       const feeInWei = await contract.swapFeeInWei()
       const feeInEther = ethers.formatEther(feeInWei)
       setSwapFee(feeInEther)
+      
+      // Also fetch stoner share to calculate staker share
+      const stonerShareValue = await contract.stonerShare()
+      const stonerSharePercent = Number(stonerShareValue)
+      const stakerSharePercent = 100 - stonerSharePercent
+      
+      setStonerShare(stonerSharePercent)
+      setStakerShare(stakerSharePercent)
+      
+      console.log(`💰 Fee split: ${stonerSharePercent}% to stoner pool, ${stakerSharePercent}% to stakers`)
     } catch (error) {
       console.log('Error fetching swap fee:', error)
       setSwapFee(null)
+      setStonerShare(null)
+      setStakerShare(null)
     }
   }
 
@@ -1133,6 +1147,8 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           swapPool={swapPool}
           provider={externalProvider}
           pendingRewards={pendingRewards}
+          stakerShare={stakerShare}
+          swapFee={swapFee}
         />
       </div>
     )

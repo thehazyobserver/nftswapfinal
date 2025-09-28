@@ -22,7 +22,9 @@ export default function StakingInterface({
   nftCollection,
   swapPool,
   provider,
-  pendingRewards = '0'
+  pendingRewards = '0',
+  stakerShare = null,
+  swapFee = null
 }) {
   // Debug logging for props
   console.log(`🖼️ StakingInterface received props:`, {
@@ -175,6 +177,27 @@ export default function StakingInterface({
                 <div className="text-xs text-yellow-300/70">Currently Staked</div>
               </div>
             </div>
+            
+            {/* Fee Split Information */}
+            {stakerShare !== null && swapFee !== null && (
+              <div className="mb-3 p-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg border border-blue-500/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-400 text-sm">📊</span>
+                    <div>
+                      <div className="text-sm font-medium text-blue-200">Staker Fee Share</div>
+                      <div className="text-xs text-blue-300/70">Of each {swapFee} S swap fee</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-blue-200">
+                      {stakerShare}%
+                    </div>
+                    <div className="text-xs text-blue-300/70">Goes to Stakers</div>
+                  </div>
+                </div>
+              </div>
+            )}
             
             <button
               onClick={handleClaimRewards}
