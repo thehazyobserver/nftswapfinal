@@ -760,15 +760,14 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     try {
       const receiptContract = new ethers.Contract(stakeReceipt, [
         "function balanceOf(address) view returns (uint256)", 
-        "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)", 
-        "function getPoolSlotId(uint256) view returns (uint256)"
+        "function tokenOfOwnerByIndex(address,uint256) view returns (uint256)"
       ], provider)
       
       // Get pool contract to fetch original NFT data
       const poolContract = new ethers.Contract(swapPool, [
         "function getPoolTokens() view returns (uint256[])",
         "function nftCollection() view returns (address)",
-        "function poolTokens(uint256) view returns (uint256)"
+        "function receiptToOriginalToken(uint256) view returns (uint256)"
       ], provider)
       
       const balance = await receiptContract.balanceOf(addr)
@@ -792,27 +791,19 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           const receiptTokenId = await receiptContract.tokenOfOwnerByIndex(addr, i)
           console.log(`🧾 Receipt token ID: ${receiptTokenId.toString()}`)
           
-          // Get pool slot ID (this is what the new contract uses)
-          let poolSlotId
-          try {
-            poolSlotId = await receiptContract.getPoolSlotId(receiptTokenId)
-            console.log(`🧾 Pool slot ID: ${poolSlotId.toString()}`)
-          } catch (error) {
-            console.log(`🧾 getPoolSlotId failed, using receiptTokenId as fallback`)
-            poolSlotId = receiptTokenId
-          }
+          // Note: We no longer need pool slot ID, we'll get original token ID directly from the mapping
           
-          // Get the actual NFT token ID from the pool using the slot ID
-          let originalNFTTokenId = poolSlotId
+          // Get the actual NFT token ID from the receipt-to-original mapping
+          let originalNFTTokenId = receiptTokenId.toString()
           let nftImage = ''
-          let nftName = `Staked NFT #${poolSlotId}`
+          let nftName = `Staked NFT #${receiptTokenId}`
           
           try {
-            // Use poolTokens mapping to get the actual NFT token ID at this slot
-            console.log(`🧾 Calling poolContract.poolTokens(${poolSlotId})...`)
-            const poolTokenId = await poolContract.poolTokens(poolSlotId)
-            originalNFTTokenId = poolTokenId
-            console.log(`🧾 ✅ Slot ${poolSlotId} contains NFT token ID: ${originalNFTTokenId}`)
+            // Use receiptToOriginalToken mapping to get the original NFT token ID
+            console.log(`🧾 Calling poolContract.receiptToOriginalToken(${receiptTokenId})...`)
+            const originalTokenId = await poolContract.receiptToOriginalToken(receiptTokenId)
+            originalNFTTokenId = originalTokenId.toString()
+            console.log(`🧾 ✅ Receipt ${receiptTokenId} maps to original NFT token ID: ${originalNFTTokenId}`)
             
             // Fetch NFT metadata using the correct token ID
             try {
@@ -856,13 +847,12 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
               console.error(`🧾 ❌ Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError)
             }
           } catch (poolError) {
-            console.error(`🧾 ❌ Failed to get NFT token ID from pool slot ${poolSlotId}:`, poolError)
+            console.error(`🧾 ❌ Failed to get original token ID for receipt ${receiptTokenId}:`, poolError)
           }
           
           const tokenData = {
             tokenId: receiptTokenId.toString(),
             originalTokenId: originalNFTTokenId.toString(),
-            poolSlotId: poolSlotId.toString(),
             image: nftImage,
             isReceiptToken: true,
             name: nftName,
