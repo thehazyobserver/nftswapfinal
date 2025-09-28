@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { ethers } from 'ethers'
 import FactoryABI from '../abis/MultiPoolFactoryNonProxy.json'
 import StakeReceiptABI from '../abis/StakeReceipt.json'
+import SwapPoolABI from '../abis/SwapPool.json'
 import PoolDetail from './PoolDetail'
 import NFTCollectionImage from './NFTCollectionImage'
 import { useWallet } from './WalletProvider'
@@ -272,20 +273,17 @@ export default function PoolList() {
       for (const pool of pools) {
         if (userStakedPools.has(pool.swapPool)) {
           try {
-            const receiptContract = new ethers.Contract(pool.stakeReceipt, StakeReceiptABI, provider)
+            // Get rewards from SwapPool contract, not receipt contract
+            const poolContract = new ethers.Contract(pool.swapPool, SwapPoolABI, provider)
             
-            // Try to get pending rewards using earned() function first
-            let pendingRewards
-            if (receiptContract.earned) {
-              pendingRewards = await receiptContract.earned(address)
-            } else {
-              // Fallback to direct pendingRewards mapping
-              pendingRewards = await receiptContract.pendingRewards(address)
-            }
+            // Get pending rewards using earned() function from SwapPool
+            const pendingRewards = await poolContract.earned(address)
+            console.log(`💰 Pool ${pool.swapPool.slice(0, 8)}... rewards: ${ethers.formatEther(pendingRewards)} S`)
             
             totalRewards = totalRewards + pendingRewards
           } catch (error) {
-            // Silently handle reward fetching errors - some contracts may not support rewards
+            console.warn(`Failed to get rewards for pool ${pool.swapPool}:`, error.message)
+            // Continue to next pool
           }
         }
       }
@@ -311,21 +309,18 @@ export default function PoolList() {
       for (const pool of pools) {
         if (userStakedPools.has(pool.swapPool)) {
           try {
-            const receiptContract = new ethers.Contract(pool.stakeReceipt, StakeReceiptABI, signer)
+            // Use SwapPool contract for claiming rewards, not receipt contract
+            const poolContract = new ethers.Contract(pool.swapPool, SwapPoolABI, signer)
             
-            // Check if there are rewards to claim
-            let pendingRewards
-            if (receiptContract.earned) {
-              pendingRewards = await receiptContract.earned(address)
-            } else {
-              pendingRewards = await receiptContract.pendingRewards(address)
-            }
+            // Check if there are rewards to claim from SwapPool
+            const pendingRewards = await poolContract.earned(address)
+            console.log(`💰 Checking pool ${pool.swapPool.slice(0, 8)}... rewards: ${ethers.formatEther(pendingRewards)} S`)
             
             if (pendingRewards > 0) {
-              const tx = await receiptContract.claimRewards()
+              const tx = await poolContract.claimRewards()
               await tx.wait()
               successCount++
-              console.log(`✅ Claimed rewards from pool: ${pool.swapPool}`)
+              console.log(`✅ Claimed ${ethers.formatEther(pendingRewards)} S from pool: ${pool.swapPool}`)
             }
           } catch (error) {
             failCount++
