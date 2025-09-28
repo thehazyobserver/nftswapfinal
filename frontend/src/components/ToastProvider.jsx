@@ -130,7 +130,7 @@ function ToastItem({ toast, onRemove }) {
           </p>
           {toast.txHash && (
             <a
-              href={`https://explorer.sonic.org/tx/${toast.txHash}`}
+              href={`https://sonicscan.org/tx/${toast.txHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs underline opacity-75 hover:opacity-100 transition-opacity mt-1 inline-block"

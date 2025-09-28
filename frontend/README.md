@@ -50,7 +50,7 @@ Environment variables on Netlify
 - Create the following environment variables in Netlify Site Settings > Build & deploy > Environment > Environment variables:
 	- `VITE_RPC_URL` — Sonic RPC URL (optional if users will connect wallets)
 	- `VITE_FACTORY_ADDRESS` — The `MultiPoolFactoryNonProxy` address used by the UI
-	- `VITE_EXPLORER_BASE` — (optional) Explorer base URL, defaults to `https://explorer.sonic.org`
+	- `VITE_EXPLORER_BASE` — (optional) Explorer base URL, defaults to `https://sonicscan.org`
 
 ## Smart Contract Integration
 

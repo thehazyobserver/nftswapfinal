@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 
 const SONIC_NETWORK = {
-  chainId: '0x92', // 146 in hex
+  chainId: '0x92', // 146 in decimal
   chainName: 'Sonic Network',
   rpcUrls: ['https://rpc.sonic.org'],
   nativeCurrency: {
@@ -9,7 +9,7 @@ const SONIC_NETWORK = {
     symbol: 'S',
     decimals: 18,
   },
-  blockExplorerUrls: ['https://explorer.sonic.org'],
+  blockExplorerUrls: ['https://sonicscan.org'],
 }
 
 export default function NetworkChecker({ onNetworkReady }) {

@@ -6,6 +6,7 @@ import NetworkChecker from './components/NetworkChecker';
 import { ToastProvider } from './components/ToastProvider';
 import { WalletProvider } from './components/WalletProvider';
 import WalletButton from './components/WalletButton';
+import CollectionImageAdmin from './components/CollectionImageAdmin';
 
 export default function App() {
   const location = useLocation();
@@ -76,6 +77,9 @@ export default function App() {
             </Routes>
           </main>
         </div>
+        
+        {/* Collection Image Admin - Available on all pages */}
+        <CollectionImageAdmin />
       </div>
     </ToastProvider>
   </WalletProvider>

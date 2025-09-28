@@ -1,90 +1,127 @@
 // NFTCollectionImage.jsx
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import { 
+  getCollectionData, 
+  getCollectionImage, 
+  generateGradient, 
+  getCollectionInitials,
+  config 
+} from '../config/collectionImages'
 
-// You can expand this mapping or fetch from a remote API
-const collectionImages = {
-  '0xB6748d708B5Cda0eA8c53e7072566971FCCb6b49': 'https://nftstorage.link/stoner.png', // Stoner
-  '0xE3941DB58B9D35410A66636da07c9B28b878B89E': 'https://nftstorage.link/boat.png', // Boat
-  // Add more as needed
-}
-
-// Generate a consistent gradient based on the collection name or address
-function generateGradient(text) {
-  if (!text) return 'from-gray-400 to-gray-600'
+export default function NFTCollectionImage({ address, collectionName, size = 48, showTooltip = false }) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [imageError, setImageError] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [tooltipVisible, setTooltipVisible] = useState(false)
   
-  const hash = text.split('').reduce((acc, char) => {
-    return char.charCodeAt(0) + ((acc << 5) - acc)
-  }, 0)
+  // Get collection data and images
+  const collectionData = getCollectionData(address)
+  const imageUrls = getCollectionImage(address)
   
-  const gradients = [
-    'from-blue-400 to-purple-600',
-    'from-purple-400 to-pink-600',
-    'from-pink-400 to-red-600',
-    'from-red-400 to-orange-600',
-    'from-orange-400 to-yellow-600',
-    'from-yellow-400 to-green-600',
-    'from-green-400 to-teal-600',
-    'from-teal-400 to-blue-600',
-    'from-indigo-400 to-purple-600',
-    'from-violet-400 to-pink-600',
-    'from-cyan-400 to-blue-600',
-    'from-emerald-400 to-teal-600'
-  ]
+  // Create array of image URLs to try (primary -> fallback -> default)
+  const imagesToTry = []
+  if (imageUrls?.primary) imagesToTry.push(imageUrls.primary)
+  if (imageUrls?.fallback) imagesToTry.push(imageUrls.fallback)
+  if (imageUrls?.default) imagesToTry.push(imageUrls.default)
   
-  return gradients[Math.abs(hash) % gradients.length]
-}
-
-// Extract initials from collection name
-function getInitials(name) {
-  if (!name || name === 'Unknown Collection' || name === 'Loading...') {
-    return '?'
+  const currentImageUrl = imagesToTry[currentImageIndex]
+  
+  // Handle image load error - try next image in the array
+  const handleImageError = () => {
+    if (currentImageIndex < imagesToTry.length - 1) {
+      setCurrentImageIndex(prev => prev + 1)
+      setLoading(true)
+    } else {
+      setImageError(true)
+      setLoading(false)
+    }
   }
   
-  const words = name.trim().split(/\s+/)
-  if (words.length === 1) {
-    return words[0].substring(0, 2).toUpperCase()
+  const handleImageLoad = () => {
+    setLoading(false)
+    setImageError(false)
   }
   
-  return words.slice(0, 2).map(word => word.charAt(0).toUpperCase()).join('')
-}
-
-export default function NFTCollectionImage({ address, collectionName, size = 48 }) {
-  const [broken, setBroken] = React.useState(false)
-  const [loading, setLoading] = React.useState(true)
+  // Reset when address changes
+  useEffect(() => {
+    setCurrentImageIndex(0)
+    setImageError(false)
+    setLoading(true)
+  }, [address])
   
-  const img = collectionImages[address?.toLowerCase()]
-  
-  if (!img || broken) {
-    const initials = getInitials(collectionName)
-    const gradient = generateGradient(collectionName || address)
+  // If no images available or all failed, show gradient with initials
+  if (!currentImageUrl || imageError) {
+    const initials = getCollectionInitials(collectionData?.name || collectionName)
+    const gradient = collectionData?.customGradient || generateGradient(collectionName || address)
     const fontSize = size <= 32 ? 'text-xs' : size <= 48 ? 'text-sm' : 'text-base'
     
-    return (
+    const gradientElement = (
       <div 
         style={{ width: size, height: size }} 
-        className={`bg-gradient-to-br ${gradient} rounded-lg flex items-center justify-center text-white font-bold ${fontSize} shadow-lg`}
+        className={`bg-gradient-to-br ${gradient} rounded-lg flex items-center justify-center text-white font-bold ${fontSize} shadow-lg cursor-pointer transition-transform hover:scale-105`}
+        onMouseEnter={() => showTooltip && setTooltipVisible(true)}
+        onMouseLeave={() => setTooltipVisible(false)}
       >
         {initials}
       </div>
     )
+    
+    if (showTooltip && collectionData?.description) {
+      return (
+        <div className="relative">
+          {gradientElement}
+          {tooltipVisible && (
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-nowrap">
+              {collectionData.description}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+            </div>
+          )}
+        </div>
+      )
+    }
+    
+    return gradientElement
   }
   
-  return (
+  // Show image with optional tooltip
+  const imageElement = (
     <div className="relative">
       {loading && (
         <div 
           style={{ width: size, height: size }} 
-          className="absolute inset-0 bg-gray-300 rounded animate-pulse"
+          className="absolute inset-0 bg-gray-300 dark:bg-gray-700 rounded-lg animate-pulse"
         />
       )}
       <img 
-        src={img} 
-        alt="NFT Collection" 
+        src={currentImageUrl} 
+        alt={collectionData?.name || collectionName || 'NFT Collection'} 
         style={{ width: size, height: size, borderRadius: 8 }} 
-        onError={() => setBroken(true)}
-        onLoad={() => setLoading(false)}
-        className={loading ? 'opacity-0' : 'opacity-100'}
+        onError={handleImageError}
+        onLoad={handleImageLoad}
+        className={`transition-all duration-200 hover:scale-105 shadow-lg ${loading ? 'opacity-0' : 'opacity-100'}`}
       />
     </div>
   )
+  
+  if (showTooltip && collectionData?.description) {
+    return (
+      <div className="relative">
+        <div
+          onMouseEnter={() => setTooltipVisible(true)}
+          onMouseLeave={() => setTooltipVisible(false)}
+        >
+          {imageElement}
+        </div>
+        {tooltipVisible && (
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg z-50 whitespace-nowrap">
+            <div className="font-semibold">{collectionData.name}</div>
+            <div className="text-xs text-gray-300">{collectionData.description}</div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+          </div>
+        )}
+      </div>
+    )
+  }
+  
+  return imageElement
 }

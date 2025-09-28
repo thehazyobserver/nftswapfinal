@@ -139,7 +139,7 @@ export const WalletProvider = ({ children }) => {
                   decimals: 18,
                 },
                 rpcUrls: ['https://rpc.soniclabs.com/'],
-                blockExplorerUrls: ['https://explorer.soniclabs.com/'],
+                blockExplorerUrls: ['https://sonicscan.org/'],
               },
             ],
           })

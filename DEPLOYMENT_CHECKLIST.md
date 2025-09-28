@@ -70,7 +70,7 @@ Set these in Netlify Site Settings > Environment variables:
 ```
 VITE_RPC_URL=https://rpc.sonic.org
 VITE_FACTORY_ADDRESS=0xA8d165838bcB3705310b1eecEa2C95583612A982
-VITE_EXPLORER_BASE=https://explorer.sonic.org
+VITE_EXPLORER_BASE=https://sonicscan.org
 ```
 
 ## 🎉 Ready for Production!
