@@ -19,7 +19,7 @@ const collections = {
   },
 
   // BOAT MONEY Collection - NFT Collection Address (not swap pool address)
-  '0x75f5EE19Bc352d19B1791684faDf23b948EDaBA3': {
+  '0x75f5ee19bc352d19b1791684fadf23b948edaba3': {
     name: 'BOAT MONEY',
     // Using a working boat/yacht image from a reliable source
     image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&h=400&fit=crop&crop=center',
