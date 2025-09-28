@@ -446,16 +446,41 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   const handleClaimRewards = async () => {
     setLoading(true)
     setStatus('Claiming rewards...')
+    console.log('💰 Starting reward claim process...')
     try {
       const signer = await getSigner()
-      const receiptContract = new ethers.Contract(stakeReceipt, StakeReceiptABI, signer)
-      const tx = await receiptContract.claimRewards()
+      console.log('💰 Got signer, creating swap pool contract...')
+      
+      // Claims rewards from the SwapPool contract, not the receipt contract
+      const poolContract = new ethers.Contract(swapPool, SwapPoolABI, signer)
+      
+      // Check pending rewards first
+      const pendingAmount = await poolContract.earned(account)
+      console.log(`💰 Pending rewards: ${ethers.formatEther(pendingAmount)} S`)
+      
+      if (pendingAmount.toString() === '0') {
+        setStatus('No rewards to claim')
+        console.log('💰 No rewards available to claim')
+        setLoading(false)
+        return
+      }
+      
+      console.log('💰 Calling claimRewards on swap pool...')
+      const tx = await poolContract.claimRewards()
+      console.log('💰 Transaction sent, waiting for confirmation...', tx.hash)
+      
       await tx.wait()
+      console.log('💰 Rewards claimed successfully!')
+      
       setStatus('Rewards claimed successfully! ✅')
-      // Refresh data
-      await refreshNFTs()
+      
+      // Refresh reward data
+      await fetchPendingRewards()
+      
     } catch (error) {
-      setStatus(`Claim failed: ${error.reason || error.message}`)
+      console.error('💰 Claim rewards error:', error)
+      const errorMessage = error.reason || error.message || 'Unknown error'
+      setStatus(`Claim failed: ${errorMessage}`)
     }
     setLoading(false)
   }
