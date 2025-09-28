@@ -18,6 +18,14 @@ const collections = {
     description: 'Boat NFT collection'
   },
 
+  // MEME RUNNER Collection - Your swap pool
+  '0x4C6D6010b75f5Da44598B74111fAEa9713dDd6da': {
+    name: 'MEME RUNNER',
+    fallback: '/images/collections/meme-runner.png', // Local image
+    description: 'Luxury yacht collection for meme enthusiasts',
+    customGradient: 'from-blue-400 to-cyan-600' // Ocean-themed gradient
+  },
+
   // Add new collections here following this format:
   // '0xYourCollectionAddress': {
   //   name: 'Your Collection Name',
