@@ -420,6 +420,11 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       // Debug: Check the receipt tokens and their mappings before unstaking
       console.log(`🔍 Debugging unstake for receipt tokens:`, selectedTokens)
       
+      // Pre-validate all tokens before attempting unstake
+      const validTokens = []
+      const poolTokens = await contract.getPoolTokens()
+      console.log(`🔍 Pool tokens length: ${poolTokens.length}`)
+      
       for (const receiptTokenId of selectedTokens) {
         try {
           console.log(`🔍 Checking receipt token ${receiptTokenId}...`)
@@ -436,32 +441,60 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           
           if (!slotInfo.active) {
             console.warn(`🔍 ⚠️ Slot ${slotId} is not active!`)
+            continue
           }
           
           if (slotInfo.receiptTokenId.toString() !== receiptTokenId.toString()) {
             console.warn(`🔍 ⚠️ Slot receipt mismatch! Slot contains ${slotInfo.receiptTokenId}, trying to unstake ${receiptTokenId}`)
+            continue
           }
+          
+          // Check if the slot would cause "Invalid slot" error
+          // The contract uses: tokenIndex = slotId - 1; require(tokenIndex < poolTokens.length)
+          const tokenIndex = Number(slotId) - 1
+          if (tokenIndex >= poolTokens.length) {
+            console.error(`🔍 ❌ Receipt ${receiptTokenId} would cause "Invalid slot": slot ${slotId} → index ${tokenIndex}, but poolTokens.length = ${poolTokens.length}`)
+            setStatus(`❌ Cannot unstake Receipt #${receiptTokenId}: Contract bug - slot ${slotId} is out of range (pool size: ${poolTokens.length})`)
+            continue
+          } else {
+            console.log(`🔍 ✅ Receipt ${receiptTokenId} is valid: slot ${slotId} → index ${tokenIndex} < ${poolTokens.length}`)
+          }
+          
+          validTokens.push(receiptTokenId)
           
         } catch (debugError) {
           console.error(`🔍 ❌ Failed to debug receipt ${receiptTokenId}:`, debugError.message)
         }
       }
       
-      setStatus(`Unstaking ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}...`)
+      if (validTokens.length === 0) {
+        setStatus('❌ No valid tokens can be unstaked due to contract limitations')
+        setLoading(false)
+        return
+      }
+      
+      if (validTokens.length < selectedTokens.length) {
+        const skipped = selectedTokens.filter(t => !validTokens.includes(t))
+        setStatus(`⚠️ Skipping ${skipped.length} token(s) due to contract bug: ${skipped.join(', ')}. Proceeding with ${validTokens.length} valid token(s)...`)
+      }
+      
+      console.log(`🔍 Proceeding with valid tokens:`, validTokens)
+      
+      setStatus(`Unstaking ${validTokens.length} NFT${validTokens.length > 1 ? 's' : ''}...`)
       
       let tx
-      if (selectedTokens.length > 1 && contract.unstakeNFTBatch) {
-        console.log(`🔄 Calling unstakeNFTBatch with:`, selectedTokens)
-        tx = await contract.unstakeNFTBatch(selectedTokens)
+      if (validTokens.length > 1 && contract.unstakeNFTBatch) {
+        console.log(`🔄 Calling unstakeNFTBatch with:`, validTokens)
+        tx = await contract.unstakeNFTBatch(validTokens)
       } else {
-        console.log(`🔄 Calling unstakeNFT with:`, selectedTokens[0])
-        tx = await contract.unstakeNFT(selectedTokens[0])
+        console.log(`🔄 Calling unstakeNFT with:`, validTokens[0])
+        tx = await contract.unstakeNFT(validTokens[0])
       }
       
       console.log(`🔄 Unstake transaction sent:`, tx.hash)
       await tx.wait()
       console.log(`🔄 Unstake transaction confirmed!`)
-      setStatus(`✅ Successfully unstaked ${selectedTokens.length} NFT${selectedTokens.length > 1 ? 's' : ''}!`)
+      setStatus(`✅ Successfully unstaked ${validTokens.length} NFT${validTokens.length > 1 ? 's' : ''}!`)
       
       // Refresh data
       await refreshNFTs()
