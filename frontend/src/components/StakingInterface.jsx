@@ -24,6 +24,14 @@ export default function StakingInterface({
   provider,
   pendingRewards = '0'
 }) {
+  // Debug logging for props
+  console.log(`🖼️ StakingInterface received props:`, {
+    walletNFTs: walletNFTs?.length || 0,
+    receiptNFTs: receiptNFTs?.length || 0,
+    stakedNFTs: stakedNFTs?.length || 0,
+    receiptLoading,
+    pendingRewards
+  })
   const [selectedWalletTokens, setSelectedWalletTokens] = useState([])
   const [selectedReceiptTokens, setSelectedReceiptTokens] = useState([])
   const toast = useToast()
@@ -344,6 +352,7 @@ export default function StakingInterface({
       </div>
 
       {/* Staked NFTs Section */}
+      {console.log(`🧪 Checking receiptNFTs for render:`, receiptNFTs, receiptNFTs?.length, receiptNFTs?.length > 0)}
       {receiptNFTs.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-3">

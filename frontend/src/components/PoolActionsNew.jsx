@@ -729,6 +729,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
   }
 
   const fetchReceiptNFTs = async (addr, provider) => {
+    console.log(`🧾 Starting fetchReceiptNFTs for address: ${addr}`)
     try {
       const receiptContract = new ethers.Contract(stakeReceipt, [
         "function balanceOf(address) view returns (uint256)", 
@@ -738,18 +739,24 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       ], provider)
       
       const balance = await receiptContract.balanceOf(addr)
+      console.log(`🧾 Receipt balance for ${addr}: ${balance.toString()}`)
       const tokens = []
       
       for (let i = 0; i < Number(balance); i++) {
         try {
+          console.log(`🧾 Fetching receipt token ${i + 1}/${balance}`)
           const receiptTokenId = await receiptContract.tokenOfOwnerByIndex(addr, i)
+          console.log(`🧾 Receipt token ID: ${receiptTokenId.toString()}`)
+          
           const originalTokenId = await receiptContract.receiptToOriginalToken(receiptTokenId)
+          console.log(`🧾 Original token ID: ${originalTokenId.toString()}`)
           
           let tokenURI = ''
           let imageUrl = ''
           
           try {
             tokenURI = await receiptContract.tokenURI(receiptTokenId)
+            console.log(`🧾 Token URI: ${tokenURI}`)
             
             if (tokenURI) {
               // Handle different URI formats
@@ -772,26 +779,35 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
                     imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/')
                   }
                 }
+                console.log(`🧾 Image URL: ${imageUrl}`)
               } catch (metadataError) {
-                // Silently handle metadata fetch errors - these are expected for some tokens
+                console.warn(`🧾 Failed to fetch metadata for ${receiptTokenId}:`, metadataError.message)
               }
             }
           } catch (tokenError) {
-            // Silently handle tokenURI errors - these are expected for non-existent tokens
+            console.warn(`🧾 Failed to get tokenURI for ${receiptTokenId}:`, tokenError.message)
           }
           
-          tokens.push({
+          const tokenData = {
             tokenId: receiptTokenId.toString(),
             originalTokenId: originalTokenId.toString(),
             image: imageUrl || ''
-          })
+          }
+          tokens.push(tokenData)
+          console.log(`🧾 Added receipt token:`, tokenData)
         } catch (error) {
-          // Silently handle receipt token fetch errors - these are expected for some tokens
+          console.error(`🧾 Error fetching receipt token ${i}:`, error.message)
         }
       }
       
-      console.log(`🧾 Receipt NFTs loaded:`, tokens.length)
+      console.log(`🧾 Receipt NFTs loaded:`, tokens.length, tokens)
+      console.log(`🧾 Setting receiptNFTs state with:`, tokens)
       setReceiptNFTs(tokens)
+      
+      // Add a small delay to check if state was set
+      setTimeout(() => {
+        console.log(`🧾 Receipt state after update (async check):`, tokens.length)
+      }, 100)
       
     } catch (error) {
       console.error('Failed to fetch receipt NFTs:', error)
@@ -976,6 +992,11 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
     
     return () => clearInterval(interval)
   }, [account, stakeReceipt])
+
+  // Track receiptNFTs state changes for debugging
+  useEffect(() => {
+    console.log(`🧾 receiptNFTs state changed:`, receiptNFTs.length, receiptNFTs)
+  }, [receiptNFTs])
   
   if (activeInterface === 'swap') {
     return (
