@@ -78,6 +78,25 @@ export default function App() {
               </div>
             </div>
           </header>
+          
+          {/* Experimental Protocol Warning */}
+          <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 via-yellow-50 to-orange-50 dark:from-amber-900/20 dark:via-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-amber-200 dark:border-amber-700/50 shadow-lg animate-slide-up">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-lg">⚠️</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-amber-800 dark:text-amber-200 text-sm mb-1">
+                  Experimental Protocol Warning
+                </h3>
+                <p className="text-amber-700 dark:text-amber-300 text-xs leading-relaxed">
+                  This is an experimental protocol that has not been audited. Use at your own risk. 
+                  Only interact with funds you can afford to lose. Smart contracts may contain bugs or vulnerabilities.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <main>
             <Routes>
               <Route path="/" element={<PoolList />} />
