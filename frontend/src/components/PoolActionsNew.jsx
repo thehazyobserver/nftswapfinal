@@ -765,7 +765,8 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
       // Get pool contract to fetch original NFT data
       const poolContract = new ethers.Contract(swapPool, [
         "function getPoolTokens() view returns (uint256[])",
-        "function nftCollection() view returns (address)"
+        "function nftCollection() view returns (address)",
+        "function poolTokens(uint256) view returns (uint256)"
       ], provider)
       
       const balance = await receiptContract.balanceOf(addr)
@@ -799,51 +800,49 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
             poolSlotId = receiptTokenId
           }
           
-          // Get the actual NFT token ID from the pool
+          // Get the actual NFT token ID from the pool using the slot ID
           let originalNFTTokenId = poolSlotId
           let nftImage = ''
           let nftName = `Staked NFT #${poolSlotId}`
           
           try {
-            // Pool slot corresponds to index in poolTokens array
-            const slotIndex = parseInt(poolSlotId.toString())
-            if (slotIndex < poolTokens.length) {
-              originalNFTTokenId = poolTokens[slotIndex]
-              console.log(`🧾 Original NFT token ID: ${originalNFTTokenId}`)
+            // Use poolTokens mapping to get the actual NFT token ID at this slot
+            const poolTokenId = await poolContract.poolTokens(poolSlotId)
+            originalNFTTokenId = poolTokenId
+            console.log(`🧾 Slot ${poolSlotId} contains NFT token ID: ${originalNFTTokenId}`)
+            
+            // Fetch NFT metadata using the correct token ID
+            try {
+              const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
+              console.log(`🧾 NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
               
-              // Fetch NFT metadata
-              try {
-                const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
-                console.log(`🧾 NFT token URI: ${tokenURI}`)
-                
-                if (tokenURI) {
-                  let metadataUrl = tokenURI
-                  if (tokenURI.startsWith('ipfs://')) {
-                    metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                  }
-                  
-                  const response = await fetch(metadataUrl)
-                  const metadata = await response.json()
-                  
-                  if (metadata.image) {
-                    nftImage = metadata.image
-                    if (nftImage.startsWith('ipfs://')) {
-                      nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
-                    }
-                  }
-                  
-                  if (metadata.name) {
-                    nftName = metadata.name
-                  }
-                  
-                  console.log(`🧾 NFT metadata - Name: ${nftName}, Image: ${nftImage}`)
+              if (tokenURI) {
+                let metadataUrl = tokenURI
+                if (tokenURI.startsWith('ipfs://')) {
+                  metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
                 }
-              } catch (metadataError) {
-                console.warn(`🧾 Failed to fetch NFT metadata:`, metadataError.message)
+                
+                const response = await fetch(metadataUrl)
+                const metadata = await response.json()
+                
+                if (metadata.image) {
+                  nftImage = metadata.image
+                  if (nftImage.startsWith('ipfs://')) {
+                    nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                }
+                
+                if (metadata.name) {
+                  nftName = metadata.name
+                }
+                
+                console.log(`🧾 NFT #${originalNFTTokenId} metadata - Name: ${nftName}, Image: ${nftImage}`)
               }
+            } catch (metadataError) {
+              console.warn(`🧾 Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError.message)
             }
           } catch (poolError) {
-            console.warn(`🧾 Failed to get original NFT data:`, poolError.message)
+            console.warn(`🧾 Failed to get NFT token ID from pool slot ${poolSlotId}:`, poolError.message)
           }
           
           const tokenData = {
