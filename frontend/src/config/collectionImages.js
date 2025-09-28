@@ -23,7 +23,6 @@ const collections = {
     name: 'BOAT MONEY',
     // Using the official MEME RUNNER boat image
     image: '/images/collections/meme-runner.png',
-    fallback: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0idXJsKCNncmFkaWVudDApIi8+CjxwYXRoIGQ9Ik0xMCAyNUwxNSAyMEwyNSAyMkwzMCAyNUgxMFoiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuOCIvPgo8cGF0aCBkPSJNMTUgMjBWMTVMMjAgMTJMMjUgMTVWMjAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJncmFkaWVudDAiIHgxPSIwIiB5MT0iMCIgeDI9IjQwIiB5Mj0iNDAiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzM5ODNGNiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwRkJCRjkiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K',
     description: 'MEME RUNNER - The premium boat NFT collection',
     customGradient: 'from-cyan-400 to-blue-600' // Ocean-themed gradient
   },
@@ -31,17 +30,15 @@ const collections = {
   // Add new collections here following this format:
   // '0xYourCollectionAddress': {
   //   name: 'Your Collection Name',
-  //   image: 'https://your-image-url.com/image.png', // Primary image URL
-  //   fallback: '/images/collections/your-collection.png', // Local fallback image
+  //   image: 'https://your-image-url.com/image.png', // Primary image URL (if fails, shows initials)
   //   description: 'Description of your collection',
-  //   customGradient: 'from-blue-500 to-purple-600' // Optional custom gradient
+  //   customGradient: 'from-blue-500 to-purple-600' // Optional custom gradient for initials
   // },
 
   // Example template for easy copying:
   // '0x0000000000000000000000000000000000000000': {
   //   name: 'Template Collection',
   //   image: 'https://example.com/image.png',
-  //   fallback: '/images/collections/template.png',
   //   description: 'Template for new collections'
   // },
 }

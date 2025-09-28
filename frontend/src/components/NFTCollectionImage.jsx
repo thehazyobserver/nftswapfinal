@@ -18,11 +18,9 @@ export default function NFTCollectionImage({ address, collectionName, size = 48,
   const collectionData = getCollectionData(address)
   const imageUrls = getCollectionImage(address)
   
-  // Create array of image URLs to try (primary -> fallback -> default)
+  // Only try the primary image - if it fails, show initials (no SVG fallbacks)
   const imagesToTry = []
   if (imageUrls?.primary) imagesToTry.push(imageUrls.primary)
-  if (imageUrls?.fallback) imagesToTry.push(imageUrls.fallback)
-  if (imageUrls?.default) imagesToTry.push(imageUrls.default)
   
   const currentImageUrl = imagesToTry[currentImageIndex]
   
