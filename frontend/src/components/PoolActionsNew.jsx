@@ -807,42 +807,54 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
           
           try {
             // Use poolTokens mapping to get the actual NFT token ID at this slot
+            console.log(`🧾 Calling poolContract.poolTokens(${poolSlotId})...`)
             const poolTokenId = await poolContract.poolTokens(poolSlotId)
             originalNFTTokenId = poolTokenId
-            console.log(`🧾 Slot ${poolSlotId} contains NFT token ID: ${originalNFTTokenId}`)
+            console.log(`🧾 ✅ Slot ${poolSlotId} contains NFT token ID: ${originalNFTTokenId}`)
             
             // Fetch NFT metadata using the correct token ID
             try {
+              console.log(`🧾 Fetching tokenURI for NFT #${originalNFTTokenId}...`)
               const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
-              console.log(`🧾 NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
+              console.log(`🧾 ✅ NFT token URI for #${originalNFTTokenId}: ${tokenURI}`)
               
-              if (tokenURI) {
+              if (tokenURI && tokenURI.trim() !== '') {
                 let metadataUrl = tokenURI
                 if (tokenURI.startsWith('ipfs://')) {
                   metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  console.log(`🧾 Converted IPFS URL to: ${metadataUrl}`)
                 }
                 
+                console.log(`🧾 Fetching metadata from: ${metadataUrl}`)
                 const response = await fetch(metadataUrl)
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+                }
+                
                 const metadata = await response.json()
+                console.log(`🧾 ✅ Fetched metadata for #${originalNFTTokenId}:`, metadata)
                 
                 if (metadata.image) {
                   nftImage = metadata.image
                   if (nftImage.startsWith('ipfs://')) {
                     nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
                   }
+                  console.log(`🧾 ✅ Image URL: ${nftImage}`)
                 }
                 
                 if (metadata.name) {
                   nftName = metadata.name
+                  console.log(`🧾 ✅ Name: ${nftName}`)
                 }
-                
-                console.log(`🧾 NFT #${originalNFTTokenId} metadata - Name: ${nftName}, Image: ${nftImage}`)
+              } else {
+                console.warn(`🧾 ⚠️ Empty or invalid tokenURI for NFT #${originalNFTTokenId}`)
               }
             } catch (metadataError) {
-              console.warn(`🧾 Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError.message)
+              console.error(`🧾 ❌ Failed to fetch metadata for NFT #${originalNFTTokenId}:`, metadataError)
             }
           } catch (poolError) {
-            console.warn(`🧾 Failed to get NFT token ID from pool slot ${poolSlotId}:`, poolError.message)
+            console.error(`🧾 ❌ Failed to get NFT token ID from pool slot ${poolSlotId}:`, poolError)
           }
           
           const tokenData = {

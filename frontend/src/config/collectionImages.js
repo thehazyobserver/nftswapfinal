@@ -21,8 +21,9 @@ const collections = {
   // BOAT MONEY Collection - NFT Collection Address (not swap pool address)
   '0x75f5EE19Bc352d19B1791684faDf23b948EDaBA3': {
     name: 'BOAT MONEY',
-    image: 'https://i.imgur.com/oZQQQQQ.jpg', // You can replace with actual boat image URL
-    fallback: '/images/collections/boat-money.png',
+    // Using a working boat/yacht image from a reliable source
+    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&h=400&fit=crop&crop=center',
+    fallback: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0idXJsKCNncmFkaWVudDApIi8+CjxwYXRoIGQ9Ik0xMCAyNUwxNSAyMEwyNSAyMkwzMCAyNUgxMFoiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuOCIvPgo8cGF0aCBkPSJNMTUgMjBWMTVMMjAgMTJMMjUgMTVWMjAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJncmFkaWVudDAiIHgxPSIwIiB5MT0iMCIgeDI9IjQwIiB5Mj0iNDAiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzM5ODNGNiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwRkJCRjkiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K',
     description: 'Luxury yacht collection for boat enthusiasts',
     customGradient: 'from-blue-400 to-cyan-600' // Ocean-themed gradient
   },

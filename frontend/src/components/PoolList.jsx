@@ -225,15 +225,34 @@ export default function PoolList() {
 
       // Don't deduplicate - show all pools even if they share the same NFT collection
       // Users may have multiple pools for the same collection with different parameters
-      const mapped = allPools.map(p => ({
-        nftCollection: p.nftCollection,
-        swapPool: p.swapPool,
-        stakeReceipt: p.stakeReceipt,
-        createdAt: new Date(Number(p.createdAt) * 1000).toLocaleString(),
-        creator: p.creator,
-        active: p.active,
-        poolAddress: p.swapPool // Keep track of unique pool address
-      }))
+      const mapped = allPools.map(p => {
+        console.log(`🗓️ Pool ${p.swapPool.slice(0, 8)}... raw createdAt:`, p.createdAt, 'Type:', typeof p.createdAt)
+        
+        let createdAtFormatted = 'Unknown'
+        if (p.createdAt && Number(p.createdAt) > 0) {
+          try {
+            const timestamp = Number(p.createdAt)
+            const date = new Date(timestamp * 1000)
+            createdAtFormatted = date.toLocaleString()
+            console.log(`🗓️ Pool ${p.swapPool.slice(0, 8)}... formatted date:`, createdAtFormatted)
+          } catch (error) {
+            console.warn(`🗓️ Failed to format date for pool ${p.swapPool}:`, error)
+          }
+        } else {
+          console.warn(`🗓️ Pool ${p.swapPool.slice(0, 8)}... has invalid createdAt:`, p.createdAt)
+        }
+        
+        return {
+          nftCollection: p.nftCollection,
+          swapPool: p.swapPool,
+          stakeReceipt: p.stakeReceipt,
+          createdAt: p.createdAt, // Keep raw timestamp for display logic
+          createdAtFormatted, // Formatted version for debugging
+          creator: p.creator,
+          active: p.active,
+          poolAddress: p.swapPool // Keep track of unique pool address
+        }
+      })
       
       console.log('All pools (no deduplication applied):', mapped)
       setPools(mapped)
