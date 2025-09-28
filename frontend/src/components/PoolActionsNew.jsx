@@ -851,6 +851,47 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
               }
             } else {
               console.warn(`🧾 ⚠️ Slot ${slotId} is out of bounds for poolTokens array (length: ${poolTokens.length})`)
+              // For out-of-bounds slots, try to use the receipt token ID as the original token ID
+              // This is a fallback for cases where the mapping might be inconsistent
+              try {
+                console.log(`🧾 🔧 Attempting fallback: using receipt token ID ${receiptTokenId} as original token ID`)
+                const fallbackTokenURI = await nftContract.tokenURI(receiptTokenId)
+                
+                if (fallbackTokenURI && fallbackTokenURI.trim() !== '') {
+                  originalNFTTokenId = receiptTokenId.toString()
+                  console.log(`🧾 ✅ Fallback successful: NFT token URI for #${originalNFTTokenId}: ${fallbackTokenURI}`)
+                  
+                  let metadataUrl = fallbackTokenURI
+                  if (fallbackTokenURI.startsWith('ipfs://')) {
+                    metadataUrl = fallbackTokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                  
+                  const response = await fetch(metadataUrl)
+                  if (response.ok) {
+                    const metadata = await response.json()
+                    console.log(`🧾 ✅ Fallback metadata for #${originalNFTTokenId}:`, metadata)
+                    
+                    if (metadata.image) {
+                      nftImage = metadata.image
+                      if (nftImage.startsWith('ipfs://')) {
+                        nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                      }
+                      console.log(`🧾 ✅ Fallback image URL: ${nftImage}`)
+                    }
+                    
+                    if (metadata.name) {
+                      nftName = metadata.name
+                      console.log(`🧾 ✅ Fallback name: ${nftName}`)
+                    }
+                  }
+                } else {
+                  console.warn(`🧾 ⚠️ Fallback failed: no tokenURI for receipt token ${receiptTokenId}`)
+                }
+              } catch (fallbackError) {
+                console.warn(`🧾 ⚠️ Fallback approach failed for receipt ${receiptTokenId}:`, fallbackError.message)
+                // Keep default values (originalNFTTokenId = receiptTokenId, empty image, generic name)
+                originalNFTTokenId = receiptTokenId.toString()
+              }
             }
           } catch (poolError) {
             console.error(`🧾 ❌ Failed to get slot ID for receipt ${receiptTokenId}:`, poolError)
