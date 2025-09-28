@@ -737,8 +737,25 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
         "function getPoolSlotId(uint256) view returns (uint256)"
       ], provider)
       
+      // Get pool contract to fetch original NFT data
+      const poolContract = new ethers.Contract(swapPool, [
+        "function getPoolTokens() view returns (uint256[])",
+        "function nftCollection() view returns (address)"
+      ], provider)
+      
       const balance = await receiptContract.balanceOf(addr)
       console.log(`🧾 Receipt balance for ${addr}: ${balance.toString()}`)
+      
+      // Get pool tokens and collection address
+      const poolTokens = await poolContract.getPoolTokens()
+      const collectionAddress = await poolContract.nftCollection()
+      console.log(`🧾 Pool has ${poolTokens.length} tokens, collection: ${collectionAddress}`)
+      
+      // Create NFT contract for metadata
+      const nftContract = new ethers.Contract(collectionAddress, [
+        "function tokenURI(uint256) view returns (string)"
+      ], provider)
+      
       const tokens = []
       
       for (let i = 0; i < Number(balance); i++) {
@@ -757,19 +774,64 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
             poolSlotId = receiptTokenId
           }
           
-          // Skip metadata fetching entirely - contract has no baseURI set
-          // Create receipt token with identifiable information
+          // Get the actual NFT token ID from the pool
+          let originalNFTTokenId = poolSlotId
+          let nftImage = ''
+          let nftName = `Staked NFT #${poolSlotId}`
+          
+          try {
+            // Pool slot corresponds to index in poolTokens array
+            const slotIndex = parseInt(poolSlotId.toString())
+            if (slotIndex < poolTokens.length) {
+              originalNFTTokenId = poolTokens[slotIndex]
+              console.log(`🧾 Original NFT token ID: ${originalNFTTokenId}`)
+              
+              // Fetch NFT metadata
+              try {
+                const tokenURI = await nftContract.tokenURI(originalNFTTokenId)
+                console.log(`🧾 NFT token URI: ${tokenURI}`)
+                
+                if (tokenURI) {
+                  let metadataUrl = tokenURI
+                  if (tokenURI.startsWith('ipfs://')) {
+                    metadataUrl = tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                  }
+                  
+                  const response = await fetch(metadataUrl)
+                  const metadata = await response.json()
+                  
+                  if (metadata.image) {
+                    nftImage = metadata.image
+                    if (nftImage.startsWith('ipfs://')) {
+                      nftImage = nftImage.replace('ipfs://', 'https://ipfs.io/ipfs/')
+                    }
+                  }
+                  
+                  if (metadata.name) {
+                    nftName = metadata.name
+                  }
+                  
+                  console.log(`🧾 NFT metadata - Name: ${nftName}, Image: ${nftImage}`)
+                }
+              } catch (metadataError) {
+                console.warn(`🧾 Failed to fetch NFT metadata:`, metadataError.message)
+              }
+            }
+          } catch (poolError) {
+            console.warn(`🧾 Failed to get original NFT data:`, poolError.message)
+          }
+          
           const tokenData = {
             tokenId: receiptTokenId.toString(),
-            originalTokenId: poolSlotId.toString(),
+            originalTokenId: originalNFTTokenId.toString(),
             poolSlotId: poolSlotId.toString(),
-            image: '', // No image - will use fallback display
+            image: nftImage,
             isReceiptToken: true,
-            name: `Staked NFT #${poolSlotId}`,
-            description: `Receipt for staked NFT from pool slot ${poolSlotId}`
+            name: nftName,
+            description: `Receipt for ${nftName} (Token #${originalNFTTokenId})`
           }
           tokens.push(tokenData)
-          console.log(`🧾 Added receipt token:`, tokenData)
+          console.log(`🧾 Added receipt token with NFT data:`, tokenData)
           
         } catch (error) {
           console.error(`🧾 Error fetching receipt token ${i}:`, error.message)

@@ -4,8 +4,36 @@ export default function NFTTokenImage({ image, tokenId, size = 64, isReceiptToke
   const [broken, setBroken] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   
+  // Special handling for receipt tokens with images
+  if (isReceiptToken && image && !broken) {
+    return (
+      <div className="relative" style={{ width: size, height: size }}>
+        {loading && (
+          <div 
+            style={{ width: size, height: size }} 
+            className="absolute inset-0 bg-gradient-to-br from-yellow-100 to-amber-200 dark:from-yellow-900/30 dark:to-amber-900/30 rounded-lg flex items-center justify-center animate-pulse border-2 border-yellow-300 dark:border-yellow-600"
+          >
+            <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
+        <img
+          src={image}
+          alt={name || `Receipt Token #${tokenId}`}
+          style={{ width: size, height: size }}
+          className={`object-cover rounded-lg border-2 border-yellow-400 dark:border-yellow-500 shadow-md ${loading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}
+          onLoad={() => setLoading(false)}
+          onError={() => setBroken(true)}
+        />
+        {/* Receipt indicator overlay */}
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center shadow-sm">
+          <span className="text-[8px]">🧾</span>
+        </div>
+      </div>
+    )
+  }
+  
   if (!image || broken) {
-    // Special styling for receipt tokens
+    // Special styling for receipt tokens without images
     if (isReceiptToken) {
       return (
         <div 
