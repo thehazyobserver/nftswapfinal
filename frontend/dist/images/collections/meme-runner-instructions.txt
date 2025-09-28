@@ -1,0 +1,17 @@
+# MEME RUNNER Image Instructions
+
+This file needs to be replaced with your actual yacht image.
+
+Steps:
+1. Find your MEME RUNNER yacht image file
+2. Rename it to: meme-runner.png
+3. Copy it to this exact location: 
+   /frontend/public/images/collections/meme-runner.png
+
+The image should be:
+- PNG format preferred
+- Square aspect ratio works best (e.g., 400x400px)
+- Not too large (under 500KB recommended)
+
+Once you replace this file with the actual image, the swap pool 
+0x4C6D6010b75f5Da44598B74111fAEa9713dDd6da will show the yacht image.

@@ -773,10 +773,12 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
                   }
                 }
               } catch (metadataError) {
-                console.warn(`Failed to fetch metadata for receipt token ${receiptTokenId}:`, metadataError)
+                // Silently handle metadata fetch errors - these are expected for some tokens
               }
             }
-          } catch {}
+          } catch (tokenError) {
+            // Silently handle tokenURI errors - these are expected for non-existent tokens
+          }
           
           tokens.push({
             tokenId: receiptTokenId.toString(),
@@ -784,7 +786,7 @@ export default function PoolActionsNew({ swapPool, stakeReceipt, provider: exter
             image: imageUrl || ''
           })
         } catch (error) {
-          console.warn(`Failed to fetch receipt token ${i}:`, error)
+          // Silently handle receipt token fetch errors - these are expected for some tokens
         }
       }
       
