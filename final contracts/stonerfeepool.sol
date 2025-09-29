@@ -352,7 +352,8 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
         // Burn receipt & clear stake - USE CORRECT RECEIPT ID
         uint256 receiptId = receiptIdByOriginal[tokenId];
-        if (receiptId == 0) revert("Missing receipt");
+        require(receiptId != 0, "Missing receipt");
+        
         receiptToken.burn(receiptId);
         delete receiptIdByOriginal[tokenId];
         delete stakerOf[tokenId];
@@ -385,7 +386,8 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
             // USE CORRECT RECEIPT ID FOR BURN
             uint256 receiptId = receiptIdByOriginal[tokenId];
-            if (receiptId == 0) revert("Missing receipt");
+                require(receiptId != 0, "Missing receipt");
+            
             receiptToken.burn(receiptId);
             delete receiptIdByOriginal[tokenId];
             delete stakerOf[tokenId];

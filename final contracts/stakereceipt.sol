@@ -722,6 +722,9 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
 
     // 🔄 CHANGED: mint() now takes poolSlotId instead of originalTokenId
     function mint(address to, uint256 poolSlotId) external onlyPool returns (uint256) {
+            require(to != address(0), "Cannot mint to zero address");
+            require(poolSlotId > 0, "Invalid pool slot ID");
+        
         uint256 receiptTokenId = _currentReceiptId;
         _currentReceiptId++;
         
