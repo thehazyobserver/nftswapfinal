@@ -242,7 +242,7 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         address nftCollection,
         uint256 customSwapFee,
         uint256 customStonerShare
-    ) external payable returns (address swapPool, address stakeReceipt) {
+    ) external payable nonReentrant returns (address swapPool, address stakeReceipt) {
         // World-class creator validation and protection
         _validatePoolCreation(nftCollection, msg.sender);
         
@@ -646,8 +646,13 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
             emit StakeDeposited(creator, stakeAmount);
         } else {
             // Owner pays everything as dev/stoner fees (no stake requirement)
-            devFeeAmount = (totalPaid * poolCreationDevFee) / (poolCreationDevFee + minimumStakeForCreation);
-            stonerFeeAmount = totalPaid - devFeeAmount;
+            if (poolCreationDevFee > 0 && totalPaid >= poolCreationDevFee) {
+                devFeeAmount = poolCreationDevFee;
+                stonerFeeAmount = totalPaid - devFeeAmount;
+            } else {
+                // If no dev fee or insufficient payment, all goes to stoner pool
+                stonerFeeAmount = totalPaid;
+            }
         }
         
         // Send dev fee
@@ -723,7 +728,7 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
      * @dev Allow creators to withdraw their stakes after pools are established (emergency only)
      * @param amount The amount to withdraw
      */
-    function withdrawCreatorStake(uint256 amount) external {
+    function withdrawCreatorStake(uint256 amount) external nonReentrant {
         if (creatorStakes[msg.sender] < amount) revert StakeNotFound();
         
         creatorStakes[msg.sender] -= amount;
@@ -832,7 +837,7 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     /**
      * @dev Emergency function to collect any stuck ETH (owner only)
      */
-    function emergencyWithdraw() external onlyOwner {
+    function emergencyWithdraw() external onlyOwner nonReentrant {
         uint256 balance = address(this).balance;
         if (balance > 0) {
             (bool success, ) = payable(owner()).call{value: balance}("");
