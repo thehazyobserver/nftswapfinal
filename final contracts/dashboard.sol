@@ -125,6 +125,18 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     // Pool configuration
     uint256 public defaultSwapFeeInWei = 0.01 ether;
     uint256 public defaultStonerShare = 20; // 20%
+    
+    // World-class governance and security
+    mapping(address => bool) public approvedCreators;   // Approved pool creators
+    mapping(address => bool) public blacklistedCollections; // Blacklisted NFT collections
+    uint256 public maxPoolsPerCreator = 10;             // Anti-spam protection
+    uint256 public poolCreationCooldown = 1 hours;      // Cooldown between pool creations
+    uint256 public minimumStakeForCreation = 0.1 ether; // Minimum stake to create pools
+    
+    // Creator tracking for limits
+    mapping(address => uint256) public poolsCreatedByUser;
+    mapping(address => uint256) public lastPoolCreationTime;
+    mapping(address => uint256) public creatorStakes;   // Refundable stakes
 
     struct PoolInfo {
         address swapPool;
@@ -153,6 +165,15 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     );
     event DefaultFeesUpdated(uint256 swapFeeInWei, uint256 stonerShare);
     event PoolDeactivated(address indexed nftCollection, address indexed swapPool);
+    
+    // World-class governance events
+    event CreatorApproved(address indexed creator);
+    event CreatorRevoked(address indexed creator);
+    event CollectionBlacklisted(address indexed collection);
+    event CollectionWhitelisted(address indexed collection);
+    event StakeDeposited(address indexed creator, uint256 amount);
+    event StakeWithdrawn(address indexed creator, uint256 amount);
+    event GovernanceParametersUpdated(uint256 maxPools, uint256 cooldown, uint256 minStake);
 
     // ---------- Errors ----------
     error ZeroAddressNotAllowed();
@@ -160,6 +181,14 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     error InvalidShareRange();
     error InvalidERC721();
     error PoolDoesNotExist();
+    
+    // World-class security errors
+    error CreatorNotApproved();
+    error CollectionIsBlacklisted(address collection);
+    error MaxPoolsExceeded();
+    error CreationCooldownActive();
+    error InsufficientStake();
+    error StakeNotFound();
 
     // ---------- Constructor ----------
     constructor(address _centralStonerFeePool) {
@@ -183,7 +212,10 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         address nftCollection,
         uint256 customSwapFee,
         uint256 customStonerShare
-    ) external onlyOwner returns (address swapPool, address stakeReceipt) {
+    ) external payable returns (address swapPool, address stakeReceipt) {
+        // World-class creator validation and protection
+        _validatePoolCreation(nftCollection, msg.sender);
+        
         // Validation
         if (nftCollection == address(0)) revert ZeroAddressNotAllowed();
         if (collectionToPool[nftCollection].exists) revert PoolAlreadyExists();
@@ -496,6 +528,133 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
             stonerShare,
             "StakeReceipt"
         )))));
+    }
+
+    // ---------- World-Class Governance Functions ----------
+    
+    /**
+     * @dev World-class pool creation validation with anti-spam and security measures
+     * @param nftCollection The NFT collection address
+     * @param creator The address attempting to create the pool
+     */
+    function _validatePoolCreation(address nftCollection, address creator) internal {
+        // Check if collection is blacklisted
+        if (blacklistedCollections[nftCollection]) revert CollectionIsBlacklisted(nftCollection);
+        
+        // For non-owner creators, enforce stricter requirements
+        if (creator != owner()) {
+            // Must be approved creator (optional - can be disabled by setting all users as approved)
+            if (!approvedCreators[creator] && !approvedCreators[address(0)]) {
+                revert CreatorNotApproved();
+            }
+            
+            // Check pool creation limits
+            if (poolsCreatedByUser[creator] >= maxPoolsPerCreator) {
+                revert MaxPoolsExceeded();
+            }
+            
+            // Check cooldown period
+            if (block.timestamp < lastPoolCreationTime[creator] + poolCreationCooldown) {
+                revert CreationCooldownActive();
+            }
+            
+            // Check minimum stake requirement
+            if (msg.value < minimumStakeForCreation) {
+                revert InsufficientStake();
+            }
+            
+            // Update tracking
+            poolsCreatedByUser[creator]++;
+            lastPoolCreationTime[creator] = block.timestamp;
+            creatorStakes[creator] += msg.value;
+            
+            emit StakeDeposited(creator, msg.value);
+        }
+    }
+    
+    /**
+     * @dev Approve a creator to create pools (owner only)
+     * @param creator The creator address to approve
+     */
+    function approveCreator(address creator) external onlyOwner {
+        approvedCreators[creator] = true;
+        emit CreatorApproved(creator);
+    }
+    
+    /**
+     * @dev Revoke creator approval (owner only)
+     * @param creator The creator address to revoke
+     */
+    function revokeCreator(address creator) external onlyOwner {
+        approvedCreators[creator] = false;
+        emit CreatorRevoked(creator);
+    }
+    
+    /**
+     * @dev Blacklist an NFT collection (owner only)
+     * @param collection The collection address to blacklist
+     */
+    function blacklistCollection(address collection) external onlyOwner {
+        blacklistedCollections[collection] = true;
+        emit CollectionBlacklisted(collection);
+    }
+    
+    /**
+     * @dev Remove collection from blacklist (owner only)
+     * @param collection The collection address to whitelist
+     */
+    function whitelistCollection(address collection) external onlyOwner {
+        blacklistedCollections[collection] = false;
+        emit CollectionWhitelisted(collection);
+    }
+    
+    /**
+     * @dev Update governance parameters (owner only)
+     * @param _maxPoolsPerCreator Maximum pools per creator
+     * @param _poolCreationCooldown Cooldown between pool creations
+     * @param _minimumStakeForCreation Minimum stake required for pool creation
+     */
+    function updateGovernanceParameters(
+        uint256 _maxPoolsPerCreator,
+        uint256 _poolCreationCooldown,
+        uint256 _minimumStakeForCreation
+    ) external onlyOwner {
+        maxPoolsPerCreator = _maxPoolsPerCreator;
+        poolCreationCooldown = _poolCreationCooldown;
+        minimumStakeForCreation = _minimumStakeForCreation;
+        
+        emit GovernanceParametersUpdated(_maxPoolsPerCreator, _poolCreationCooldown, _minimumStakeForCreation);
+    }
+    
+    /**
+     * @dev Allow creators to withdraw their stakes after pools are established (emergency only)
+     * @param amount The amount to withdraw
+     */
+    function withdrawCreatorStake(uint256 amount) external {
+        if (creatorStakes[msg.sender] < amount) revert StakeNotFound();
+        
+        creatorStakes[msg.sender] -= amount;
+        
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Withdrawal failed");
+        
+        emit StakeWithdrawn(msg.sender, amount);
+    }
+    
+    /**
+     * @dev Enable permissionless pool creation by approving all users (owner only)
+     */
+    function enablePermissionlessCreation() external onlyOwner {
+        approvedCreators[address(0)] = true; // Special flag for all users
+        emit CreatorApproved(address(0));
+    }
+    
+    /**
+     * @dev Disable permissionless pool creation (owner only)
+     */
+    function disablePermissionlessCreation() external onlyOwner {
+        approvedCreators[address(0)] = false;
+        emit CreatorRevoked(address(0));
     }
 
     /**

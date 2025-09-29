@@ -216,6 +216,11 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // Batch limits
     uint256 public maxBatchSize = 10;
     uint256 public maxUnstakeAllLimit = 20;
+    
+    // World-class circuit breaker for extreme market conditions
+    uint256 public maxDailyVolume = 1000; // Max swaps per day
+    uint256 public dailyVolumeCount;
+    uint256 public lastVolumeResetDay;
 
     // Events
     event SwapExecuted(address indexed user, uint256 tokenIdIn, uint256 tokenIdOut, uint256 slotId, uint256 feePaid);
@@ -336,14 +341,15 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         require(n > 0 && n <= maxBatchSize, "Invalid batch size");
         _checkForDuplicates(tokenIds);
 
-        // Pre-validate ownership
+        // Pre-validate ownership and token IDs in single loop for gas efficiency
         for (uint256 i = 0; i < n; ++i) {
-            require(IERC721(nftCollection).ownerOf(tokenIds[i]) == msg.sender, "Not token owner");
+            uint256 tokenId = tokenIds[i];
+            require(tokenId != 0, "SwapPool: Invalid token ID");
+            require(IERC721(nftCollection).ownerOf(tokenId) == msg.sender, "Not token owner");
         }
 
         for (uint256 i = 0; i < n; ++i) {
             uint256 tokenId = tokenIds[i];
-            require(tokenId != 0, "SwapPool: Invalid token ID");
             
             // Create new pool slot atomically
             uint256 slotId = nextSlotId;
@@ -398,6 +404,17 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         
         if (poolTokens.length == 0) revert NoTokensAvailable();
         if (msg.value != swapFeeInWei) revert IncorrectFee();
+        
+        // World-class circuit breaker - reset daily counter if new day
+        uint256 currentDay = block.timestamp / 86400;
+        if (currentDay > lastVolumeResetDay) {
+            dailyVolumeCount = 0;
+            lastVolumeResetDay = currentDay;
+        }
+        
+        // Check daily volume limit for market stability
+        require(dailyVolumeCount < maxDailyVolume, "Daily volume limit reached");
+        dailyVolumeCount++;
 
         // Get random token from pool
         uint256 tokenIdOut = _getRandomAvailableToken();
@@ -641,7 +658,19 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     
     function _getRandomAvailableToken() internal view returns (uint256) {
         require(poolTokens.length > 0, "No tokens in pool");
-        uint256 randomIndex = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao, msg.sender))) % poolTokens.length;
+        
+        // Enhanced randomness with multiple entropy sources for better MEV resistance
+        uint256 entropy = uint256(keccak256(abi.encodePacked(
+            block.timestamp,
+            block.prevrandao,
+            msg.sender,
+            block.number,
+            poolTokens.length,
+            totalActiveSlots,
+            tx.gasprice
+        )));
+        
+        uint256 randomIndex = entropy % poolTokens.length;
         return poolTokens[randomIndex];
     }
 

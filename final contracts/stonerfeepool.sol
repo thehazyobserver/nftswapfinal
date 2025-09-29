@@ -231,6 +231,13 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     mapping(address => mapping(address => uint256)) public erc20Rewards;
     // user => token => userRewardPerTokenPaid
     mapping(address => mapping(address => uint256)) public erc20UserRewardPerTokenPaid;
+    
+    // ---------- World-Class Flash Attack Protection ----------
+    // Track when each stake began (prevents flash-stake attacks)
+    mapping(uint256 => uint256) public stakeStartTime;
+    
+    // World-class security constants
+    uint256 public constant MINIMUM_STAKE_PERIOD = 1 hours;     // Prevent flash attacks
 
     // ---------- Events ----------
     event Staked(address indexed user, uint256 indexed tokenId);
@@ -249,6 +256,9 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // Emergency Withdrawal Events
     event EmergencyERC20Withdrawal(address indexed token, address indexed to, uint256 amount);
     event EmergencyETHWithdrawal(address indexed to, uint256 amount);
+    
+    // World-Class Security Events
+    event FlashStakeAttemptBlocked(address indexed user);
 
     // ---------- Errors (gas efficient) ----------
     error NotStaked();
@@ -268,6 +278,10 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     error TokenAlreadyWhitelisted();
     error ZeroTokenAmount();
     error NoERC20Rewards();
+    
+    // World-class security errors
+    error FlashStakeDetected();
+    error MinimumStakePeriodNotMet();
 
     constructor(address _stonerNFT, address _receiptToken) {
         if (_stonerNFT == address(0) || _receiptToken == address(0)) revert ZeroAddress();
@@ -296,8 +310,9 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         stakedTokens[msg.sender].push(tokenId);
         stakedTokenIndex[tokenId] = index;
 
-        // Timestamp analytics (lightweight)
+        // Timestamp analytics (lightweight) + Flash-attack protection
         stakeInfos[tokenId] = StakeInfo({ staker: msg.sender, stakedAt: block.timestamp, active: true });
+        stakeStartTime[tokenId] = block.timestamp; // Track stake start for minimum period enforcement
 
         // Mint receipt token (SBT recommended) - STORE RECEIPT ID
         uint256 receiptId = receiptToken.mint(msg.sender, tokenId);
@@ -346,6 +361,11 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
     function unstake(uint256 tokenId) external whenNotPaused nonReentrant {
         if (stakerOf[tokenId] != msg.sender) revert NotYourToken();
+        
+        // World-class flash attack protection
+        if (block.timestamp < stakeStartTime[tokenId] + MINIMUM_STAKE_PERIOD) {
+            revert MinimumStakePeriodNotMet();
+        }
 
         // Settle BEFORE balance changes
         _updateReward(msg.sender);
@@ -418,6 +438,9 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     }
 
     function claimRewardsOnly() external nonReentrant {
+        // World-class flash-attack protection
+        _preventFlashStakeRewardClaim(msg.sender);
+        
         _updateReward(msg.sender);
         uint256 payout = rewards[msg.sender];
         if (payout == 0) revert NoRewards();
@@ -469,6 +492,22 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             emit RewardClaimed(msg.sender, payout);
         }
     }
+    
+    // ---------- World-Class Protection Functions ----------
+    
+    /**
+     * @dev Prevents reward claiming during flash-stake attacks
+     * @param user The user address to check
+     */
+    function _preventFlashStakeRewardClaim(address user) internal view {
+        uint256[] memory userStakes = stakedTokens[user];
+        
+        for (uint256 i = 0; i < userStakes.length; i++) {
+            if (block.timestamp < stakeStartTime[userStakes[i]] + MINIMUM_STAKE_PERIOD) {
+                revert FlashStakeDetected();
+            }
+        }
+    }
 
     // ---------- ERC20 Rewards ----------
 
@@ -502,6 +541,9 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
     function claimERC20Rewards(address token) external nonReentrant {
         if (!whitelistedTokens[token]) revert TokenNotWhitelisted();
+        
+        // World-class flash-attack protection for reward claiming
+        _preventFlashStakeRewardClaim(msg.sender);
         
         _updateReward(msg.sender);
         uint256 payout = erc20Rewards[msg.sender][token];
@@ -848,6 +890,27 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     ) {
         StakeInfo memory info = stakeInfos[tokenId];
         return (info.staker, info.stakedAt, info.active ? block.timestamp - info.stakedAt : 0, info.active);
+    }
+    
+    // ---------- World-Class Economic Protection ----------
+    
+
+    
+    /**
+     * @dev Emergency function to detect and prevent flash-stake attacks
+     * @param user The user address to check
+     * @return hasFlashStake True if user has stakes younger than minimum period
+     */
+    function checkForFlashStake(address user) external view returns (bool hasFlashStake) {
+        uint256[] memory userStakes = stakedTokens[user];
+        
+        for (uint256 i = 0; i < userStakes.length; i++) {
+            if (block.timestamp < stakeStartTime[userStakes[i]] + MINIMUM_STAKE_PERIOD) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     // ---------- ERC721 Receiver ----------

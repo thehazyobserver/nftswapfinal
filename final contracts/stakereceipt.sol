@@ -461,6 +461,60 @@ library Strings {
     }
 }
 
+// Base64 library for metadata encoding
+library Base64 {
+    bytes internal constant TABLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    function encode(bytes memory data) internal pure returns (string memory) {
+        uint256 len = data.length;
+        if (len == 0) return "";
+
+        uint256 encodedLen = 4 * ((len + 2) / 3);
+        bytes memory result = new bytes(encodedLen + 32);
+
+        bytes memory table = TABLE;
+
+        assembly {
+            let tablePtr := add(table, 1)
+            let resultPtr := add(result, 32)
+
+            for {
+                let i := 0
+            } lt(i, len) {
+
+            } {
+                i := add(i, 3)
+                let input := and(mload(add(data, i)), 0xffffff)
+
+                let out := mload(add(tablePtr, and(shr(18, input), 0x3F)))
+                out := shl(8, out)
+                out := add(out, and(mload(add(tablePtr, and(shr(12, input), 0x3F))), 0xFF))
+                out := shl(8, out)
+                out := add(out, and(mload(add(tablePtr, and(shr(6, input), 0x3F))), 0xFF))
+                out := shl(8, out)
+                out := add(out, and(mload(add(tablePtr, and(input, 0x3F))), 0xFF))
+                out := shl(224, out)
+
+                mstore(resultPtr, out)
+
+                resultPtr := add(resultPtr, 4)
+            }
+
+            switch mod(len, 3)
+            case 1 {
+                mstore(sub(resultPtr, 2), shl(240, 0x3d3d))
+            }
+            case 2 {
+                mstore(sub(resultPtr, 1), shl(248, 0x3d))
+            }
+
+            mstore(result, encodedLen)
+        }
+
+        return string(result);
+    }
+}
+
 // Math library
 library Math {
     enum Rounding {
@@ -686,6 +740,10 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
     address public pool;
     string private baseURI;
     
+    // World-class supply management
+    uint256 public maxSupply = 1000000; // 1M max receipts for scalability
+    bool public emergencyPaused;
+    
     // 🔄 CHANGED: Track pool slot IDs instead of original token IDs
     mapping(uint256 => uint256) public receiptToPoolSlot;
     
@@ -703,6 +761,8 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
     error NonTransferable();
     error InvalidURI();
     error PoolAlreadySet();
+    error MaxSupplyExceeded();
+    error EmergencyPaused();
 
     constructor(string memory name_, string memory symbol_) ERC721(name_, symbol_) {
         _currentReceiptId = 1; // Start from 1 to avoid confusion with tokenId 0
@@ -722,8 +782,10 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
 
     // 🔄 CHANGED: mint() now takes poolSlotId instead of originalTokenId
     function mint(address to, uint256 poolSlotId) external onlyPool returns (uint256) {
-            require(to != address(0), "Cannot mint to zero address");
-            require(poolSlotId > 0, "Invalid pool slot ID");
+        if (emergencyPaused) revert EmergencyPaused();
+        require(to != address(0), "Cannot mint to zero address");
+        require(poolSlotId > 0, "Invalid pool slot ID");
+        if (totalSupply() >= maxSupply) revert MaxSupplyExceeded();
         
         uint256 receiptTokenId = _currentReceiptId;
         _currentReceiptId++;
@@ -966,6 +1028,50 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
 
     function _baseURI() internal view override returns (string memory) {
         return baseURI;
+    }
+    
+    // World-class dynamic metadata with staking analytics
+    function tokenURI(uint256 receiptTokenId) public view override returns (string memory) {
+        _requireMinted(receiptTokenId);
+        
+        string memory baseUri = _baseURI();
+        if (bytes(baseUri).length == 0) {
+            // Fallback to dynamic JSON metadata
+            return _generateDynamicMetadata(receiptTokenId);
+        }
+        
+        return bytes(baseUri).length > 0 ? 
+            string(abi.encodePacked(baseUri, Strings.toString(receiptTokenId))) : "";
+    }
+    
+    function _generateDynamicMetadata(uint256 receiptTokenId) internal view returns (string memory) {
+        uint256 poolSlotId = receiptToPoolSlot[receiptTokenId];
+        uint256 stakingDuration = block.timestamp - receiptMintTime[receiptTokenId];
+        
+        // Generate dynamic metadata based on staking performance
+        string memory attributes = string(abi.encodePacked(
+            '{"trait_type":"Pool Slot ID","value":"', Strings.toString(poolSlotId), '"},',
+            '{"trait_type":"Staking Duration (days)","value":"', Strings.toString(stakingDuration / 86400), '"},',
+            '{"trait_type":"Original Minter","value":"', Strings.toHexString(uint160(receiptMinter[receiptTokenId]), 20), '"}'
+        ));
+        
+        return string(abi.encodePacked(
+            'data:application/json;base64,',
+            Base64.encode(bytes(string(abi.encodePacked(
+                '{"name":"Staking Receipt #', Strings.toString(receiptTokenId), 
+                '","description":"NFT Swap Pool Staking Receipt","attributes":[', attributes, ']}'
+            ))))
+        ));
+    }
+
+    // World-class emergency controls
+    function setEmergencyPause(bool paused) external onlyOwner {
+        emergencyPaused = paused;
+    }
+    
+    function setMaxSupply(uint256 newMaxSupply) external onlyOwner {
+        require(newMaxSupply >= totalSupply(), "Cannot set below current supply");
+        maxSupply = newMaxSupply;
     }
 
     /// @dev Register my contract on Sonic FeeM
