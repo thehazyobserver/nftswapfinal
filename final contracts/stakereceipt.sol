@@ -795,8 +795,9 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
         return receiptToPoolSlot[receiptTokenId];
     }
 
-    function validateReceipt(uint256 receiptTokenId, address expectedPool) external view returns (bool) {
-        return _exists(receiptTokenId) && pool == expectedPool;
+    function validateReceipt(uint256 receiptTokenId, address expectedOwner) external view returns (bool) {
+        require(msg.sender == pool, "StakeReceipt: Caller is not the authorized pool");
+        return ownerOf(receiptTokenId) == expectedOwner;
     }
 
     // 📊 ENHANCED QUERY FUNCTIONS FOR UI
