@@ -189,6 +189,11 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // High precision accumulator base used to carry remainder during distribution
     uint256 private constant PRECISION = 1e18;
 
+    // Emergency stakers list for emergency distribution
+    address[] public emergencyStakersList;
+    mapping(address => bool) public isInEmergencyList;
+    mapping(address => uint256) public emergencyStakerIndex;
+
     struct StakeInfo {
         address staker;
         uint256 stakedAt;
@@ -310,6 +315,13 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         stakedTokens[msg.sender].push(tokenId);
         stakedTokenIndex[tokenId] = index;
 
+        // Add to emergency stakers list if not already there
+        if (!isInEmergencyList[msg.sender]) {
+            emergencyStakerIndex[msg.sender] = emergencyStakersList.length;
+            emergencyStakersList.push(msg.sender);
+            isInEmergencyList[msg.sender] = true;
+        }
+
         // Timestamp analytics (lightweight) + Flash-attack protection
         stakeInfos[tokenId] = StakeInfo({ staker: msg.sender, stakedAt: block.timestamp, active: true });
         stakeStartTime[tokenId] = block.timestamp; // Track stake start for minimum period enforcement
@@ -349,6 +361,7 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             stakedTokens[msg.sender].push(tokenId);
 
             stakeInfos[tokenId] = StakeInfo({ staker: msg.sender, stakedAt: block.timestamp, active: true });
+            stakeStartTime[tokenId] = block.timestamp;
 
             // STORE RECEIPT ID FOR PROPER BURN
             uint256 receiptId = receiptToken.mint(msg.sender, tokenId);
@@ -356,6 +369,13 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
             unchecked { totalStaked += 1; }
             emit Staked(msg.sender, tokenId);
+        }
+
+        // Add to emergency stakers list if not already there
+        if (!isInEmergencyList[msg.sender]) {
+            emergencyStakerIndex[msg.sender] = emergencyStakersList.length;
+            emergencyStakersList.push(msg.sender);
+            isInEmergencyList[msg.sender] = true;
         }
     }
 
@@ -382,6 +402,22 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
         _removeFromArray(stakedTokens[msg.sender], tokenId);
         unchecked { totalStaked -= 1; }
+
+        // Remove from emergency stakers list if user has no more stakes
+        if (stakedTokens[msg.sender].length == 0 && isInEmergencyList[msg.sender]) {
+            uint256 stakerIndex = emergencyStakerIndex[msg.sender];
+            uint256 lastIndex = emergencyStakersList.length - 1;
+            
+            if (stakerIndex != lastIndex) {
+                address lastStaker = emergencyStakersList[lastIndex];
+                emergencyStakersList[stakerIndex] = lastStaker;
+                emergencyStakerIndex[lastStaker] = stakerIndex;
+            }
+            
+            emergencyStakersList.pop();
+            delete isInEmergencyList[msg.sender];
+            delete emergencyStakerIndex[msg.sender];
+        }
 
         // Return NFT
         stonerNFT.safeTransferFrom(address(this), msg.sender, tokenId);
@@ -716,19 +752,104 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         emit EmergencyERC20Withdrawal(token, to, withdrawAmount);
     }
 
-    function emergencyWithdrawETH(address to, uint256 amount) external onlyOwner nonReentrant {
-        if (to == address(0)) revert ZeroAddress();
-        
+    /**
+     * @dev Emergency function to force all current stakers to claim their rewards
+     * This distributes all ETH in the contract to rightful owners and prevents owner drain
+     */
+    function emergencyDistributeAllRewards() external onlyOwner nonReentrant {
         uint256 contractBalance = address(this).balance;
         if (contractBalance == 0) revert ZeroETH();
+        if (emergencyStakersList.length == 0) revert NoStakers();
         
-        uint256 withdrawAmount = amount == 0 ? contractBalance : amount;
-        if (withdrawAmount > contractBalance) revert ZeroETH();
+        // Distribute rewards to all stakers in the emergency list
+        uint256 totalStakers = emergencyStakersList.length;
+        uint256 remainingBalance = contractBalance;
         
-        (bool success, ) = payable(to).call{value: withdrawAmount}("");
-        if (!success) revert TransferFailed();
+        for (uint256 i = 0; i < totalStakers; i++) {
+            address staker = emergencyStakersList[i];
+            
+            // Update rewards for this staker
+            _updateReward(staker);
+            uint256 stakerReward = rewards[staker];
+            
+            if (stakerReward > 0) {
+                // Ensure we don't distribute more than available
+                if (stakerReward > remainingBalance) {
+                    stakerReward = remainingBalance;
+                }
+                
+                rewards[staker] = 0;
+                unchecked { totalRewardsClaimed += stakerReward; }
+                
+                (bool ok, ) = payable(staker).call{value: stakerReward}("");
+                if (ok) {
+                    emit RewardClaimed(staker, stakerReward);
+                    remainingBalance -= stakerReward;
+                }
+            }
+        }
         
-        emit EmergencyETHWithdrawal(to, withdrawAmount);
+        // If there's remaining balance after distribution, it stays in contract
+        // This prevents owner from taking unclaimed rewards
+        
+        emit EmergencyETHWithdrawal(address(0), contractBalance - remainingBalance);
+    }
+
+    /**
+     * @dev Emergency function to unstake all NFTs and return them to their owners
+     * This empties the contract of all staked assets and returns them to rightful owners
+     */
+    function emergencyUnstakeAllStakes() external onlyOwner nonReentrant {
+        uint256 stakersCount = emergencyStakersList.length;
+        if (stakersCount == 0) revert NoStakers();
+        
+        // Iterate through all stakers and unstake all their tokens
+        for (uint256 i = 0; i < stakersCount; i++) {
+            address staker = emergencyStakersList[i];
+            uint256[] memory stakerTokens = stakedTokens[staker];
+            
+            // Unstake all tokens for this staker
+            for (uint256 j = stakerTokens.length; j > 0; j--) {
+                uint256 tokenId = stakerTokens[j - 1];
+                
+                // Skip if already unstaked somehow
+                if (!isStaked[tokenId]) continue;
+                
+                // Update rewards before unstaking
+                _updateReward(staker);
+                
+                // Get receipt ID and unstake
+                uint256 receiptId = receiptIdByOriginal[tokenId];
+                if (receiptId != 0) {
+                    // Burn receipt
+                    receiptToken.burn(receiptId);
+                    delete receiptIdByOriginal[tokenId];
+                    
+                    // Clear stake data
+                    delete stakerOf[tokenId];
+                    isStaked[tokenId] = false;
+                    stakeInfos[tokenId].active = false;
+                    
+                    // Remove from stakedTokens array
+                    _removeFromArray(stakedTokens[staker], tokenId);
+                    
+                    unchecked { totalStaked -= 1; }
+                    
+                    // Return NFT to staker
+                    stonerNFT.safeTransferFrom(address(this), staker, tokenId);
+                    emit EmergencyUnstake(tokenId, staker);
+                }
+            }
+            
+            // Remove staker from emergency list
+            delete isInEmergencyList[staker];
+            delete emergencyStakerIndex[staker];
+        }
+        
+        // Clear the emergency stakers list
+        delete emergencyStakersList;
+        
+        emit EmergencyETHWithdrawal(address(0), 0); // Signal completion
     }
 
     function emergencyUnstake(uint256 tokenId, address to) external onlyOwner nonReentrant {
