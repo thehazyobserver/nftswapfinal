@@ -178,6 +178,12 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     uint256 public swapFeeInWei;
     uint256 public stonerShare; // Percentage (0–100)
     bool public initialized;
+    
+    // Dev fee system
+    address public immutable originalDev;  // Original developer (immutable protection)
+    address public devWallet;          // Dev fee recipient
+    uint256 public devFeePercentage;   // Dev fee percentage (0-20%)
+    bool public devFeeEnabled;         // Can be disabled by owner
 
     // Pool management - NOW THESE ARE THE SAME THING!
     uint256[] public poolTokens;                    // NFTs available for swapping (THE LIQUIDITY)
@@ -228,7 +234,11 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     event SwapFeeUpdated(uint256 newFeeInWei);
     event StonerShareUpdated(uint256 newShare);
     event BatchLimitsUpdated(uint256 newMaxBatchSize, uint256 newMaxUnstakeAll);
-    event FeeSplit(uint256 stonerAmount, uint256 rewardsAmount);
+    event FeeSplit(uint256 devAmount, uint256 stonerAmount, uint256 rewardsAmount);
+    
+    // Dev fee events  
+    event DevFeeConfigured(address indexed devWallet, uint256 devFeePercentage, bool enabled);
+    event DevFeeCollected(address indexed devWallet, uint256 amount);
 
     // Errors
     error AlreadyInitialized();
@@ -244,6 +254,10 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     error SameTokenSwap();
     error NotTokenOwner();
     error TokenNotApproved();
+    
+    // Dev fee errors
+    error InvalidDevWallet();
+    error InvalidDevFeePercentage();
 
     modifier onlyInitialized() {
         if (!initialized) revert NotInitialized();
@@ -265,15 +279,23 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         address _receiptContract,
         address _stonerPool,
         uint256 _swapFeeInWei,
-        uint256 _stonerShare
+        uint256 _stonerShare,
+        address _devWallet,
+        uint256 _devFeePercentage
     ) {
         if (_stonerShare > 100) revert InvalidStonerShare();
+        if (_devFeePercentage > 20) revert InvalidDevFeePercentage(); // Max 20% dev fee
+        if (_devWallet == address(0)) revert InvalidDevWallet();
 
         nftCollection = _nftCollection;
         receiptContract = _receiptContract;
         stonerPool = _stonerPool;
         swapFeeInWei = _swapFeeInWei;
         stonerShare = _stonerShare;
+        originalDev = _devWallet; // Store original developer immutably
+        devWallet = _devWallet;
+        devFeePercentage = _devFeePercentage;
+        devFeeEnabled = true;
         initialized = true;
 
         lastUpdateTime = block.timestamp;
@@ -665,9 +687,28 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     }
     
     function _distributeFees(uint256 totalFee) internal {
-        uint256 stonerAmount = (totalFee * stonerShare) / 100;
-        uint256 rewardsAmount = totalFee - stonerAmount;
+        uint256 devAmount = 0;
+        uint256 stonerAmount = 0;
+        uint256 rewardsAmount = 0;
+        
+        // Calculate dev fee first if enabled
+        if (devFeeEnabled && devFeePercentage > 0) {
+            devAmount = (totalFee * devFeePercentage) / 100;
+        }
+        
+        // Calculate stoner fee from remaining amount
+        uint256 remainingAfterDev = totalFee - devAmount;
+        stonerAmount = (remainingAfterDev * stonerShare) / 100;
+        rewardsAmount = remainingAfterDev - stonerAmount;
+        
+        // Send dev fee
+        if (devAmount > 0 && devWallet != address(0)) {
+            (bool success, ) = payable(devWallet).call{value: devAmount}("");
+            require(success, "Dev fee transfer failed");
+            emit DevFeeCollected(devWallet, devAmount);
+        }
 
+        // Send stoner fee
         if (stonerAmount > 0) {
             (bool success, ) = payable(stonerPool).call{value: stonerAmount}("");
             require(success, "Stoner pool transfer failed");
@@ -684,7 +725,7 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             emit RewardsDistributed(rewardsAmount);
         }
 
-        emit FeeSplit(stonerAmount, rewardsAmount);
+        emit FeeSplit(devAmount, stonerAmount, rewardsAmount);
     }
     
     function _checkForDuplicates(uint256[] calldata tokenIds) internal pure {
@@ -789,6 +830,41 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         maxUnstakeAllLimit = newMaxUnstakeAll;
         emit BatchLimitsUpdated(newMaxBatchSize, newMaxUnstakeAll);
     }
+    
+    // -------------------- DEV FEE ADMIN --------------------
+    
+    function setDevFeeConfiguration(
+        address newDevWallet,
+        uint256 newDevFeePercentage,
+        bool enabled
+    ) external onlyOwner {
+        if (newDevWallet == address(0)) revert InvalidDevWallet();
+        if (newDevFeePercentage > 20) revert InvalidDevFeePercentage(); // Max 20%
+        
+        devWallet = newDevWallet;
+        devFeePercentage = newDevFeePercentage;
+        devFeeEnabled = enabled;
+        
+        emit DevFeeConfigured(newDevWallet, newDevFeePercentage, enabled);
+    }
+    
+    function toggleDevFee(bool enabled) external onlyOwner {
+        devFeeEnabled = enabled;
+        emit DevFeeConfigured(devWallet, devFeePercentage, enabled);
+    }
+    
+    /**
+     * @dev Emergency function for original dev to reclaim dev wallet (originalDev only)
+     * This ensures original developer always retains control over dev fees
+     */
+    function reclaimDevWallet() external {
+        require(msg.sender == originalDev, "Only original dev can reclaim");
+        
+        devWallet = originalDev;
+        devFeeEnabled = true; // Re-enable dev fees for original dev
+        
+        emit DevFeeConfigured(originalDev, devFeePercentage, true);
+    }
 
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
@@ -801,6 +877,16 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         (bool success, ) = payable(owner()).call{value: address(this).balance}("");
         require(success, "ETH transfer failed");
     }
+    
+    /**
+     * @dev Override ownership transfer to ensure dev continues to receive fees
+     * @param newOwner The new owner address  
+     */
+    function transferOwnership(address newOwner) public override onlyOwner {
+        require(newOwner != address(0), "New owner cannot be zero address");
+        // Note: Dev wallet is immutable after deployment, ensuring continued dev fee collection
+        super.transferOwnership(newOwner);
+    }
 
     /// @dev Register my contract on Sonic FeeM
     function registerMe() external {
@@ -808,6 +894,49 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             abi.encodeWithSignature("selfRegister(uint256)", 92)
         );
         require(_success, "FeeM registration failed");
+    }
+    
+    // -------------------- DEV FEE VIEW FUNCTIONS --------------------
+    
+    /**
+     * @dev Get current dev fee configuration
+     * @return originalDevAddress The immutable original developer address
+     * @return currentWallet The current dev wallet address
+     * @return feePercentage The dev fee percentage
+     * @return enabled Whether dev fees are enabled
+     */
+    function getDevFeeConfiguration() external view returns (
+        address originalDevAddress,
+        address currentWallet,
+        uint256 feePercentage,
+        bool enabled
+    ) {
+        return (originalDev, devWallet, devFeePercentage, devFeeEnabled);
+    }
+    
+    /**
+     * @dev Calculate fee distribution for a given swap fee amount
+     * @param swapFeeAmount The total swap fee amount
+     * @return devAmount Amount going to dev wallet
+     * @return stonerAmount Amount going to stoner pool
+     * @return rewardsAmount Amount going to stakers as rewards
+     */
+    function calculateFeeDistribution(uint256 swapFeeAmount) external view returns (
+        uint256 devAmount,
+        uint256 stonerAmount,
+        uint256 rewardsAmount
+    ) {
+        // Calculate dev fee first if enabled
+        if (devFeeEnabled && devFeePercentage > 0) {
+            devAmount = (swapFeeAmount * devFeePercentage) / 100;
+        }
+        
+        // Calculate stoner fee from remaining amount
+        uint256 remainingAfterDev = swapFeeAmount - devAmount;
+        stonerAmount = (remainingAfterDev * stonerShare) / 100;
+        rewardsAmount = remainingAfterDev - stonerAmount;
+        
+        return (devAmount, stonerAmount, rewardsAmount);
     }
 
     // -------------------- ERC721 RECEIVER --------------------

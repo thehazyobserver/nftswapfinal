@@ -136,6 +136,12 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     uint256 public defaultSwapFeeInWei = 0.01 ether;
     uint256 public defaultStonerShare = 20; // 20%
     
+    // Dev fee system
+    address public immutable originalDev;  // Original developer (immutable protection)
+    address public devWallet;              // Dev fee recipient
+    uint256 public devFeePercentage = 10;  // 10% of pool creation fees go to dev
+    uint256 public poolCreationDevFee = 0.01 ether; // Fixed dev fee per pool creation
+    
     // World-class governance and security
     mapping(address => bool) public approvedCreators;   // Approved pool creators
     mapping(address => bool) public blacklistedCollections; // Blacklisted NFT collections
@@ -185,6 +191,11 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     event StakeWithdrawn(address indexed creator, uint256 amount);
     event GovernanceParametersUpdated(uint256 maxPools, uint256 cooldown, uint256 minStake);
     event IntegratedPoolDeployment(address indexed nftCollection, address indexed swapPool, address indexed stakeReceipt, address creator, string receiptName);
+    
+    // Dev fee events
+    event DevWalletUpdated(address indexed oldWallet, address indexed newWallet);
+    event DevFeeUpdated(uint256 devFeePercentage, uint256 poolCreationDevFee);
+    event DevFeeCollected(address indexed creator, uint256 devFeeAmount, uint256 stonerFeeAmount);
 
     // ---------- Errors ----------
     error ZeroAddressNotAllowed();
@@ -199,6 +210,8 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     error MaxPoolsExceeded();
     error CreationCooldownActive();
     error InsufficientStake();
+    error InvalidDevWallet();
+    error InvalidDevFeePercentage();
     error StakeNotFound();
 
     // ---------- Constructor ----------
@@ -206,6 +219,8 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         if (_centralStonerFeePool == address(0)) revert ZeroAddressNotAllowed();
         
         centralStonerFeePool = _centralStonerFeePool;
+        originalDev = _msgSender(); // Immutable original developer
+        devWallet = _msgSender(); // Initially set deployer as dev wallet
         emit FactoryDeployed(_centralStonerFeePool, msg.sender);
     }
 
@@ -564,18 +579,64 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
                 revert CreationCooldownActive();
             }
             
-            // Check minimum stake requirement
-            if (msg.value < minimumStakeForCreation) {
+            // Check minimum stake requirement (including dev fee)
+            uint256 totalRequired = minimumStakeForCreation + poolCreationDevFee;
+            if (msg.value < totalRequired) {
                 revert InsufficientStake();
             }
             
             // Update tracking
             poolsCreatedByUser[creator]++;
             lastPoolCreationTime[creator] = block.timestamp;
-            creatorStakes[creator] += msg.value;
             
-            emit StakeDeposited(creator, msg.value);
+            // Distribute pool creation fees
+            _distributePoolCreationFees(msg.value, creator);
+        } else {
+            // Owner can still pay dev fee if they want to support development
+            if (msg.value > 0) {
+                _distributePoolCreationFees(msg.value, creator);
+            }
         }
+    }
+    
+    /**
+     * @dev Distribute pool creation fees between dev, StonerFeePool, and creator stakes
+     * @param totalPaid The total amount paid by creator
+     * @param creator The creator address
+     */
+    function _distributePoolCreationFees(uint256 totalPaid, address creator) internal {
+        uint256 devFeeAmount = 0;
+        uint256 stonerFeeAmount = 0;
+        uint256 stakeAmount = 0;
+        
+        if (creator != owner()) {
+            // For non-owner creators, split fees according to configuration
+            devFeeAmount = poolCreationDevFee;
+            stonerFeeAmount = ((totalPaid - devFeeAmount) * devFeePercentage) / 100;
+            stakeAmount = totalPaid - devFeeAmount - stonerFeeAmount;
+            
+            // Track refundable stake
+            creatorStakes[creator] += stakeAmount;
+            emit StakeDeposited(creator, stakeAmount);
+        } else {
+            // Owner pays everything as dev/stoner fees (no stake requirement)
+            devFeeAmount = (totalPaid * poolCreationDevFee) / (poolCreationDevFee + minimumStakeForCreation);
+            stonerFeeAmount = totalPaid - devFeeAmount;
+        }
+        
+        // Send dev fee
+        if (devFeeAmount > 0 && devWallet != address(0)) {
+            (bool success, ) = payable(devWallet).call{value: devFeeAmount}("");
+            require(success, "Dev fee transfer failed");
+        }
+        
+        // Send stoner fee to StonerFeePool for rewards distribution
+        if (stonerFeeAmount > 0) {
+            (bool success, ) = payable(centralStonerFeePool).call{value: stonerFeeAmount}("");
+            require(success, "StonerFeePool transfer failed");
+        }
+        
+        emit DevFeeCollected(creator, devFeeAmount, stonerFeeAmount);
     }
     
     /**
@@ -697,6 +758,111 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         // This is simplified to prevent interface dependency issues
     }
     
+    // ---------- Dev Fee Management ----------
+    
+    /**
+     * @dev Update dev wallet address (owner only)
+     * @param newDevWallet The new dev wallet address
+     */
+    function updateDevWallet(address newDevWallet) external onlyOwner {
+        if (newDevWallet == address(0)) revert InvalidDevWallet();
+        
+        address oldWallet = devWallet;
+        devWallet = newDevWallet;
+        
+        emit DevWalletUpdated(oldWallet, newDevWallet);
+    }
+    
+    /**
+     * @dev Emergency function for original dev to reclaim dev wallet (originalDev only)
+     * This ensures original developer always retains control over dev fees
+     */
+    function reclaimDevWallet() external {
+        require(msg.sender == originalDev, "Only original dev can reclaim");
+        
+        address oldWallet = devWallet;
+        devWallet = originalDev;
+        
+        emit DevWalletUpdated(oldWallet, originalDev);
+    }
+    
+    /**
+     * @dev Update dev fee configuration (owner only)
+     * @param newDevFeePercentage Percentage of pool creation fees that go to dev (0-50%)
+     * @param newPoolCreationDevFee Fixed dev fee amount per pool creation
+     */
+    function updateDevFeeConfiguration(
+        uint256 newDevFeePercentage,
+        uint256 newPoolCreationDevFee
+    ) external onlyOwner {
+        if (newDevFeePercentage > 50) revert InvalidDevFeePercentage(); // Max 50%
+        
+        devFeePercentage = newDevFeePercentage;
+        poolCreationDevFee = newPoolCreationDevFee;
+        
+        emit DevFeeUpdated(newDevFeePercentage, newPoolCreationDevFee);
+    }
+    
+    /**
+     * @dev Emergency function to collect any stuck ETH (owner only)
+     */
+    function emergencyWithdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            (bool success, ) = payable(owner()).call{value: balance}("");
+            require(success, "Emergency withdrawal failed");
+        }
+    }
+    
+    /**
+     * @dev Override ownership transfer to ensure dev fees continue
+     * @param newOwner The new owner address
+     */
+    function transferOwnership(address newOwner) public override onlyOwner {
+        require(newOwner != address(0), "New owner cannot be zero address");
+        // Note: Dev wallet is separate from owner, so dev fees continue regardless of ownership changes
+        super.transferOwnership(newOwner);
+    }
+    
+    // ---------- View Functions ----------
+    
+    /**
+     * @dev Get current dev fee configuration
+     * @return originalDevAddress The immutable original developer address
+     * @return currentWallet The current dev wallet address
+     * @return feePercentage The dev fee percentage  
+     * @return creationFee The fixed dev fee per pool creation
+     */
+    function getDevFeeConfiguration() external view returns (
+        address originalDevAddress,
+        address currentWallet,
+        uint256 feePercentage,
+        uint256 creationFee
+    ) {
+        return (originalDev, devWallet, devFeePercentage, poolCreationDevFee);
+    }
+    
+    /**
+     * @dev Calculate total cost for pool creation (including dev fees)
+     * @return totalCost The total ETH required for pool creation
+     * @return devFee The dev fee portion
+     * @return stakeFee The stoner fee portion
+     * @return stakeAmount The refundable stake portion
+     */
+    function calculatePoolCreationCost() external view returns (
+        uint256 totalCost,
+        uint256 devFee,
+        uint256 stakeFee,
+        uint256 stakeAmount
+    ) {
+        totalCost = minimumStakeForCreation + poolCreationDevFee;
+        devFee = poolCreationDevFee;
+        stakeFee = ((minimumStakeForCreation) * devFeePercentage) / 100;
+        stakeAmount = minimumStakeForCreation - stakeFee;
+        
+        return (totalCost, devFee, stakeFee, stakeAmount);
+    }
+    
     // ---------- Integrated Deployment Functions ----------
     
     /**
@@ -746,12 +912,15 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     ) internal view returns (address) {
         // TODO: Replace with actual contract deployment
         // This is a placeholder that would need CREATE2 or similar
+        // When implementing real deployment, pass devWallet and devFeePercentage to constructor
         return address(uint160(uint256(keccak256(abi.encodePacked(
             nftCollection,
             receiptContract,
             stonerPool,
             swapFeeInWei,
             stonerShare,
+            devWallet,
+            devFeePercentage,
             block.timestamp
         )))));
     }
