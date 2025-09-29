@@ -469,10 +469,14 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             uint256 tokenIdIn = tokenIdsIn[i];
             uint256 tokenIdOut = _getRandomAvailableToken();
             
-            // Prevent self-swap
-            while (tokenIdOut == tokenIdIn && poolTokens.length > 1) {
+            // Prevent self-swap with safety counter to avoid infinite loops
+            uint256 attempts = 0;
+            while (tokenIdOut == tokenIdIn && poolTokens.length > 1 && attempts < 10) {
                 tokenIdOut = _getRandomAvailableToken();
+                attempts++;
             }
+            // If still same token after 10 attempts, this suggests a problem but proceed anyway
+            require(tokenIdOut != tokenIdIn || poolTokens.length == 1, "Cannot avoid self-swap");
 
             // Find slot and update current token
             uint256 affectedSlotId = tokenToSlot[tokenIdOut];
@@ -529,20 +533,23 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         onlyInitialized
         updateReward(msg.sender)
     {
-        uint256[] memory userSlotIds = userSlots[msg.sender];
+        uint256[] storage userSlotIds = userSlots[msg.sender];
         require(userSlotIds.length > 0, "No staked NFTs");
         require(userSlotIds.length <= maxUnstakeAllLimit, "Too many staked NFTs");
 
-        uint256[] memory receiptTokenIds = new uint256[](userSlotIds.length);
-        uint256[] memory returnedTokens = new uint256[](userSlotIds.length);
+        uint256 totalSlots = userSlotIds.length;
+        uint256[] memory receiptTokenIds = new uint256[](totalSlots);
+        uint256[] memory returnedTokens = new uint256[](totalSlots);
         
-        // Process in reverse to avoid array issues
-        for (uint256 i = userSlotIds.length; i > 0; --i) {
-            uint256 slotId = userSlotIds[i - 1];
+        // Process from end to beginning to avoid array shifting issues
+        // Since _unstakeInternal modifies userSlots, we need to work backwards
+        for (uint256 i = 0; i < totalSlots; i++) {
+            // Always take the last element since array shrinks with each unstake
+            uint256 slotId = userSlotIds[userSlotIds.length - 1];
             uint256 receiptTokenId = poolSlots[slotId].receiptTokenId;
             
-            receiptTokenIds[i - 1] = receiptTokenId;
-            returnedTokens[i - 1] = _unstakeInternal(receiptTokenId);
+            receiptTokenIds[totalSlots - 1 - i] = receiptTokenId;
+            returnedTokens[totalSlots - 1 - i] = _unstakeInternal(receiptTokenId);
         }
 
         emit BatchUnstaked(msg.sender, receiptTokenIds, returnedTokens);
@@ -742,9 +749,11 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             if (slots[i] == slotId) {
                 slots[i] = slots[slots.length - 1];
                 slots.pop();
-                break;
+                return;
             }
         }
+        // If we reach here, slotId was not found - this should never happen
+        revert("Slot not found in user slots");
     }
 
     // -------------------- REWARD VIEWS --------------------

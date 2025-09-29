@@ -638,8 +638,10 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         if (creator != owner()) {
             // For non-owner creators, split fees according to configuration
             devFeeAmount = poolCreationDevFee;
-            stonerFeeAmount = ((totalPaid - devFeeAmount) * devFeePercentage) / 100;
-            stakeAmount = totalPaid - devFeeAmount - stonerFeeAmount;
+            // Calculate stoner fee from remaining amount after dev fee
+            uint256 remainingAfterDev = totalPaid - devFeeAmount;
+            stonerFeeAmount = (remainingAfterDev * devFeePercentage) / 100;
+            stakeAmount = remainingAfterDev - stonerFeeAmount;
             
             // Track refundable stake
             creatorStakes[creator] += stakeAmount;
