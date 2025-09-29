@@ -167,7 +167,7 @@ interface IERC20 {
 }
 
 interface IStakeReceipt {
-    function mint(address to, uint256 originalTokenId) external returns (uint256);
+    function mint(address to, uint256 poolSlotId) external returns (uint256);
     function burn(uint256 tokenId) external;
     function ownerOf(uint256 tokenId) external view returns (address);
 }

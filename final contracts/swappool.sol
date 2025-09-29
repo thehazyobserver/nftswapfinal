@@ -189,11 +189,13 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         uint256 stakedAt;          // When this slot was created
         bool active;               // Is this slot still active
         uint256 receiptTokenId;    // Receipt token for this slot
+        uint256 currentTokenId;    // Current token in this slot (tracks swaps)
     }
     
     mapping(uint256 => PoolSlot) public poolSlots;           // slotId => PoolSlot info
     mapping(address => uint256[]) public userSlots;          // user => slotIds[]
     mapping(uint256 => uint256) public receiptToSlot;        // receiptTokenId => slotId
+    mapping(uint256 => uint256) public tokenToSlot;          // currentTokenId => slotId
     
     uint256 public nextSlotId = 1;                           // Counter for slot IDs
     uint256 public totalActiveSlots;                         // Number of active slots (for rewards)
@@ -310,12 +312,14 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             originalStaker: msg.sender,
             stakedAt: block.timestamp,
             active: true,
-            receiptTokenId: receiptTokenId
+            receiptTokenId: receiptTokenId,
+            currentTokenId: tokenId
         });
         
         // Update mappings
         userSlots[msg.sender].push(slotId);
         receiptToSlot[receiptTokenId] = slotId;
+        tokenToSlot[tokenId] = slotId;
         totalActiveSlots++;
 
         emit Staked(msg.sender, tokenId, slotId, receiptTokenId);
@@ -363,12 +367,14 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
                 originalStaker: msg.sender,
                 stakedAt: block.timestamp,
                 active: true,
-                receiptTokenId: receiptTokenId
+                receiptTokenId: receiptTokenId,
+                currentTokenId: tokenId
             });
             
             // Update mappings
             userSlots[msg.sender].push(slotId);
             receiptToSlot[receiptTokenId] = slotId;
+            tokenToSlot[tokenId] = slotId;
             totalActiveSlots++;
 
             emit Staked(msg.sender, tokenId, slotId, receiptTokenId);
@@ -397,8 +403,13 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         uint256 tokenIdOut = _getRandomAvailableToken();
         if (tokenIdOut == tokenIdIn) revert SameTokenSwap();
 
-        // Find which slot this token belongs to (for event)
-        uint256 affectedSlotId = _findSlotForToken(tokenIdOut);
+        // Find which slot this token belongs to and update it
+        uint256 affectedSlotId = tokenToSlot[tokenIdOut];
+        if (affectedSlotId != 0) {
+            poolSlots[affectedSlotId].currentTokenId = tokenIdIn;
+            tokenToSlot[tokenIdIn] = affectedSlotId;
+            delete tokenToSlot[tokenIdOut];
+        }
 
         // Replace the token in the pool
         _replaceTokenInPool(tokenIdOut, tokenIdIn);
@@ -438,6 +449,14 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
             // Prevent self-swap
             while (tokenIdOut == tokenIdIn && poolTokens.length > 1) {
                 tokenIdOut = _getRandomAvailableToken();
+            }
+
+            // Find slot and update current token
+            uint256 affectedSlotId = tokenToSlot[tokenIdOut];
+            if (affectedSlotId != 0) {
+                poolSlots[affectedSlotId].currentTokenId = tokenIdIn;
+                tokenToSlot[tokenIdIn] = affectedSlotId;
+                delete tokenToSlot[tokenIdOut];
             }
 
             // Replace token in pool
@@ -533,6 +552,7 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         
         // Clean up mappings
         delete receiptToSlot[receiptTokenId];
+        delete tokenToSlot[currentTokenId];
         
         // Burn receipt token first (this can revert safely)
         IReceiptContract(receiptContract).burn(receiptTokenId);
@@ -625,45 +645,10 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         return poolTokens[randomIndex];
     }
 
-    function _findSlotForToken(uint256 tokenId) internal view returns (uint256) {
-            // Find which slot currently contains this token by iterating through active slots
-            // This is more expensive but handles the case where tokens have been swapped between slots
-            for (uint256 slotId = 1; slotId < nextSlotId; ++slotId) {
-                if (!poolSlots[slotId].active) continue;
-            
-                // Check if this slot's position in poolTokens array contains our token
-                uint256 tokenIndex = tokenIndexInPool[tokenId];
-                if (tokenIndex < poolTokens.length && poolTokens[tokenIndex] == tokenId) {
-                    // This is a heuristic - in a fully correct implementation, we'd need
-                    // a more sophisticated mapping to track which slot owns which position
-                    // For now, we'll use a simple approach that works for most cases
-                    return slotId;
-                }
-            }
-            return 0; // Not found
-    }
-
     function _getCurrentTokenForSlot(uint256 slotId) internal view returns (uint256) {
-            // Get pool slot info to verify it exists and is active
-            PoolSlot storage slot = poolSlots[slotId];
-            require(slot.active, "Slot not active");
-        
-            // The relationship between slots and poolTokens is complex due to swapping
-            // We need to find which token is currently assigned to this slot
-            // For now, use a safe approach that works with the current pool state
-        
-            // Calculate expected position (this may not always be correct due to swapping)
-            uint256 expectedIndex = slotId - 1;
-        
-            // Safety check: ensure we don't go out of bounds
-            if (expectedIndex >= poolTokens.length) {
-                // If the simple mapping fails, try to find any available token
-                // This is a fallback for edge cases
-                require(poolTokens.length > 0, "No tokens available in pool");
-                return poolTokens[0]; // Return first available token as fallback
-            }
-        
-            return poolTokens[expectedIndex];
+        PoolSlot storage slot = poolSlots[slotId];
+        require(slot.active, "Slot not active");
+        return slot.currentTokenId;
     }
     
     function _distributeFees(uint256 totalFee) internal {
