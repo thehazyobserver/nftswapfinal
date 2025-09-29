@@ -239,6 +239,11 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // Dev fee events  
     event DevFeeConfigured(address indexed devWallet, uint256 devFeePercentage, bool enabled);
     event DevFeeCollected(address indexed devWallet, uint256 amount);
+    
+    // Emergency events
+    event EmergencyNFTWithdrawn(uint256 indexed tokenId, address indexed to);
+    event EmergencyRewardsDistributed(uint256 totalDistributed);
+    event EmergencyUnstakeAll(uint256 slotsProcessed);
 
     // Errors
     error AlreadyInitialized();
@@ -878,13 +883,148 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
     
+    /**
+     * @dev Emergency function to withdraw a specific NFT to its rightful owner
+     * This prevents owner from taking NFTs that belong to stakers
+     */
     function emergencyWithdraw(uint256 tokenId) external onlyOwner {
+        // Find the slot this token belongs to
+        uint256 slotId = tokenToSlot[tokenId];
+        
+        if (slotId != 0) {
+            // This token belongs to a staker - return to original staker
+            PoolSlot storage slot = poolSlots[slotId];
+            if (slot.active) {
+                address rightfulOwner = slot.originalStaker;
+                IERC721(nftCollection).safeTransferFrom(address(this), rightfulOwner, tokenId);
+                emit EmergencyNFTWithdrawn(tokenId, rightfulOwner);
+                return;
+            }
+        }
+        
+        // If no slot found or slot inactive, this might be stuck token - return to owner as last resort
         IERC721(nftCollection).safeTransferFrom(address(this), owner(), tokenId);
+        emit EmergencyNFTWithdrawn(tokenId, owner());
     }
     
-    function emergencyWithdrawETH() external onlyOwner {
-        (bool success, ) = payable(owner()).call{value: address(this).balance}("");
-        require(success, "ETH transfer failed");
+    /**
+     * @dev Emergency function to force all current stakers to claim their rewards
+     * This distributes all ETH in the contract to rightful owners and prevents owner drain
+     */
+    function emergencyDistributeAllRewards() external onlyOwner nonReentrant {
+        uint256 contractBalance = address(this).balance;
+        require(contractBalance > 0, "No ETH to distribute");
+        require(totalActiveSlots > 0, "No active stakers");
+        
+        // Get all active stakers by iterating through pool slots
+        address[] memory activeStakers = new address[](totalActiveSlots);
+        uint256[] memory stakerSlotCounts = new uint256[](totalActiveSlots);
+        uint256 uniqueStakers = 0;
+        
+        // Build list of unique stakers and their slot counts
+        for (uint256 slotId = 1; slotId < nextSlotId; slotId++) {
+            PoolSlot storage slot = poolSlots[slotId];
+            if (slot.active) {
+                address staker = slot.originalStaker;
+                
+                // Find if staker already in list
+                bool found = false;
+                for (uint256 j = 0; j < uniqueStakers; j++) {
+                    if (activeStakers[j] == staker) {
+                        stakerSlotCounts[j]++;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                // Add new staker
+                if (!found) {
+                    activeStakers[uniqueStakers] = staker;
+                    stakerSlotCounts[uniqueStakers] = 1;
+                    uniqueStakers++;
+                }
+            }
+        }
+        
+        // Distribute rewards proportionally to each staker
+        uint256 remainingBalance = contractBalance;
+        for (uint256 i = 0; i < uniqueStakers; i++) {
+            address staker = activeStakers[i];
+            
+            // Update rewards for this staker
+            uint256 stakerRewards = earned(staker);
+            
+            if (stakerRewards > 0) {
+                // Ensure we don't distribute more than available
+                if (stakerRewards > remainingBalance) {
+                    stakerRewards = remainingBalance;
+                }
+                
+                pendingRewards[staker] = 0;
+                userRewardPerTokenPaid[staker] = rewardPerTokenStored;
+                
+                (bool success, ) = payable(staker).call{value: stakerRewards}("");
+                if (success) {
+                    emit RewardsClaimed(staker, stakerRewards);
+                    remainingBalance -= stakerRewards;
+                }
+            }
+        }
+        
+        // If there's remaining balance, it stays in contract to prevent owner drain
+        emit EmergencyRewardsDistributed(contractBalance - remainingBalance);
+    }
+
+    /**
+     * @dev Emergency function to unstake all NFTs and return them to their original owners
+     * This empties the contract of all staked assets and returns them to rightful owners
+     */
+    function emergencyUnstakeAllNFTs() external onlyOwner nonReentrant {
+        require(totalActiveSlots > 0, "No active stakes");
+        
+        // Process all active slots
+        for (uint256 slotId = 1; slotId < nextSlotId; slotId++) {
+            PoolSlot storage slot = poolSlots[slotId];
+            if (!slot.active) continue;
+            
+            address originalStaker = slot.originalStaker;
+            uint256 receiptTokenId = slot.receiptTokenId;
+            uint256 currentTokenId = slot.currentTokenId;
+            
+            // Update rewards before unstaking
+            pendingRewards[originalStaker] = earned(originalStaker);
+            userRewardPerTokenPaid[originalStaker] = rewardPerTokenStored;
+            
+            // Validate NFT exists and we own it
+            if (IERC721(nftCollection).ownerOf(currentTokenId) == address(this)) {
+                // Remove from pool
+                _removeTokenFromPool(currentTokenId);
+                
+                // Update slot state
+                slot.active = false;
+                totalActiveSlots--;
+                
+                // Remove from user slots
+                _removeFromUserSlots(originalStaker, slotId);
+                
+                // Clean up mappings
+                delete receiptToSlot[receiptTokenId];
+                delete tokenToSlot[currentTokenId];
+                
+                // Burn receipt token
+                try IReceiptContract(receiptContract).burn(receiptTokenId) {} catch {}
+                
+                // Transfer NFT back to original staker
+                IERC721(nftCollection).safeTransferFrom(address(this), originalStaker, currentTokenId);
+                
+                emit Unstaked(originalStaker, currentTokenId, slotId, receiptTokenId);
+            }
+        }
+        
+        // Reset the slot counter for future use
+        nextSlotId = 1;
+        
+        emit EmergencyUnstakeAll(totalActiveSlots);
     }
     
     /**
