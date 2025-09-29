@@ -737,7 +737,9 @@ library Math {
  * Key change: Tracks pool slots instead of original token IDs since SwapPool uses a slot-based system
  */
 contract StakeReceipt is ERC721Enumerable, Ownable {
-    address public pool;
+    // REDESIGN: Support multiple authorized pools instead of single pool
+    mapping(address => bool) public authorizedPools;
+    address[] public authorizedPoolsList;
     string private baseURI;
     
     // World-class supply management
@@ -768,20 +770,44 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
         _currentReceiptId = 1; // Start from 1 to avoid confusion with tokenId 0
     }
 
-    modifier onlyPool() {
-        if (msg.sender != pool) revert OnlyPool();
+    modifier onlyAuthorizedPool() {
+        if (!authorizedPools[msg.sender]) revert OnlyPool();
         _;
     }
     
-    function setPool(address _pool) external onlyOwner {
-        if (pool != address(0)) revert PoolAlreadySet();
+    /**
+     * @dev Authorize a pool to mint/burn receipts (owner only)
+     * @param _pool The pool address to authorize
+     */
+    function authorizePool(address _pool) external onlyOwner {
         require(_pool != address(0), "Zero pool address");
-        pool = _pool;
-        emit PoolSet(_pool);
+        if (!authorizedPools[_pool]) {
+            authorizedPools[_pool] = true;
+            authorizedPoolsList.push(_pool);
+            emit PoolSet(_pool);
+        }
+    }
+    
+    /**
+     * @dev Remove pool authorization (owner only)
+     * @param _pool The pool address to deauthorize
+     */
+    function deauthorizePool(address _pool) external onlyOwner {
+        if (authorizedPools[_pool]) {
+            authorizedPools[_pool] = false;
+            // Remove from array (expensive but admin only)
+            for (uint256 i = 0; i < authorizedPoolsList.length; i++) {
+                if (authorizedPoolsList[i] == _pool) {
+                    authorizedPoolsList[i] = authorizedPoolsList[authorizedPoolsList.length - 1];
+                    authorizedPoolsList.pop();
+                    break;
+                }
+            }
+        }
     }
 
     // 🔄 CHANGED: mint() now takes poolSlotId instead of originalTokenId
-    function mint(address to, uint256 poolSlotId) external onlyPool returns (uint256) {
+    function mint(address to, uint256 poolSlotId) external onlyAuthorizedPool returns (uint256) {
         if (emergencyPaused) revert EmergencyPaused();
         require(to != address(0), "Cannot mint to zero address");
         require(poolSlotId > 0, "Invalid pool slot ID");
@@ -801,7 +827,7 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
         return receiptTokenId;
     }
 
-    function burn(uint256 receiptTokenId) external onlyPool {
+    function burn(uint256 receiptTokenId) external onlyAuthorizedPool {
         address owner = ownerOf(receiptTokenId);
         uint256 poolSlotId = receiptToPoolSlot[receiptTokenId];
         
@@ -815,7 +841,7 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
         emit ReceiptBurned(owner, receiptTokenId, poolSlotId);
     }
 
-    function batchMint(address to, uint256[] calldata poolSlotIds) external onlyPool returns (uint256[] memory) {
+    function batchMint(address to, uint256[] calldata poolSlotIds) external onlyAuthorizedPool returns (uint256[] memory) {
         require(poolSlotIds.length > 0, "Empty array");
         require(poolSlotIds.length <= 10, "Too many tokens"); // Gas protection
         
@@ -837,7 +863,7 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
         return receiptTokenIds;
     }
 
-    function batchBurn(uint256[] calldata receiptTokenIds) external onlyPool {
+    function batchBurn(uint256[] calldata receiptTokenIds) external onlyAuthorizedPool {
         require(receiptTokenIds.length > 0, "Empty array");
         require(receiptTokenIds.length <= 10, "Too many tokens"); // Gas protection
         
@@ -938,7 +964,7 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
             receiptIds[i] = receiptId;
             poolSlots[i] = receiptToPoolSlot[receiptId];
             holdingDurations[i] = holdingDuration;
-            poolAddresses[i] = pool; // All receipts are from the same pool
+            poolAddresses[i] = address(0); // Multiple pools supported now
             
             totalDuration += holdingDuration;
             if (holdingDuration > maxAge) {
@@ -956,7 +982,7 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
             poolAddresses,
             _currentReceiptId - 1,
             _getUniqueHolderCount(),
-            pool != address(0)
+            authorizedPoolsList.length > 0
         );
     }
 
@@ -1117,7 +1143,7 @@ contract StakeReceipt is ERC721Enumerable, Ownable {
             name(),
             symbol(),
             totalSupply(),
-            pool,
+            authorizedPoolsList.length > 0 ? authorizedPoolsList[0] : address(0), // Return first authorized pool
             baseURI,
             _currentReceiptId
         );

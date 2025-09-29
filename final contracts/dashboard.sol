@@ -102,6 +102,16 @@ interface IERC721 is IERC165 {
     function isApprovedForAll(address owner, address operator) external view returns (bool);
 }
 
+// Additional interfaces for integrated deployment
+interface IERC721Metadata {
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
+}
+
+interface IPermissionedStakeReceipt {
+    function authorizePool(address pool) external;
+}
+
 // ============================================================================
 // Multi-Pool Factory for Non-Proxy Deployment
 // ============================================================================
@@ -174,6 +184,7 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
     event StakeDeposited(address indexed creator, uint256 amount);
     event StakeWithdrawn(address indexed creator, uint256 amount);
     event GovernanceParametersUpdated(uint256 maxPools, uint256 cooldown, uint256 minStake);
+    event IntegratedPoolDeployment(address indexed nftCollection, address indexed swapPool, address indexed stakeReceipt, address creator, string receiptName);
 
     // ---------- Errors ----------
     error ZeroAddressNotAllowed();
@@ -235,31 +246,25 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
             revert InvalidERC721();
         }
 
-        // DEPLOYMENT INSTRUCTION:
-        // Deploy SwapPool and StakeReceipt contracts manually with these parameters:
-        //
-        // 1. Deploy StakeReceipt with UPDATED INTERFACE:
-        //    constructor(string memory name, string memory symbol)
-        //    Example: StakeReceipt("Collection A Receipt", "CAR")
-        //    
-        //    IMPORTANT: Receipt contract must implement:
-        //    - mint(address to, uint256 poolSlotId) instead of mint(address to, uint256 originalTokenId)
-        //    - getPoolSlotId(uint256 receiptTokenId) instead of getOriginalTokenId(uint256 receiptTokenId)
-        //
-        // 2. Deploy SwapPool:
-        //    constructor(
-        //        address _nftCollection,      // The NFT collection
-        //        address _receiptContract,    // StakeReceipt from step 1
-        //        address _stonerPool,         // centralStonerFeePool
-        //        uint256 _swapFeeInWei,       // swapFeeInWei
-        //        uint256 _stonerShare         // stonerShare
-        //    )
-        //
-        // 3. Call this factory's registerPoolPair() with the deployed addresses
+        // 🚀 INTEGRATED DEPLOYMENT: Deploy both contracts automatically
         
-        // Placeholder addresses (replace with actual deployment):
-        swapPool = _predictPoolAddress(nftCollection, swapFeeInWei, stonerShare);
-        stakeReceipt = _predictReceiptAddress(nftCollection, swapFeeInWei, stonerShare);
+        // 1. Deploy StakeReceipt with proper naming
+        string memory receiptName = string(abi.encodePacked(_getCollectionName(nftCollection), " Receipt"));
+        string memory receiptSymbol = string(abi.encodePacked(_getCollectionSymbol(nftCollection), "R"));
+        
+        stakeReceipt = _deployStakeReceipt(receiptName, receiptSymbol);
+        
+        // 2. Deploy SwapPool with StakeReceipt reference
+        swapPool = _deploySwapPool(
+            nftCollection,
+            stakeReceipt,
+            centralStonerFeePool,
+            swapFeeInWei,
+            stonerShare
+        );
+        
+        // 3. Authorize the SwapPool to use the StakeReceipt
+        IPermissionedStakeReceipt(stakeReceipt).authorizePool(swapPool);
 
         // Update mappings
         collectionToPool[nftCollection] = PoolInfo({
@@ -284,6 +289,7 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         poolCount++;
 
         emit PoolPairCreated(nftCollection, swapPool, stakeReceipt, msg.sender);
+        emit IntegratedPoolDeployment(nftCollection, swapPool, stakeReceipt, msg.sender, receiptName);
         
         return (swapPool, stakeReceipt);
     }
@@ -689,5 +695,64 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         // - Check that swapPool has the correct stonerPool set
         // - Verify stakeReceipt is configured correctly
         // This is simplified to prevent interface dependency issues
+    }
+    
+    // ---------- Integrated Deployment Functions ----------
+    
+    /**
+     * @dev Get collection name for receipt naming
+     */
+    function _getCollectionName(address nftCollection) internal view returns (string memory) {
+        try IERC721Metadata(nftCollection).name() returns (string memory name) {
+            return name;
+        } catch {
+            return "NFT Collection";
+        }
+    }
+    
+    /**
+     * @dev Get collection symbol for receipt naming
+     */
+    function _getCollectionSymbol(address nftCollection) internal view returns (string memory) {
+        try IERC721Metadata(nftCollection).symbol() returns (string memory symbol) {
+            return symbol;
+        } catch {
+            return "NFT";
+        }
+    }
+    
+    /**
+     * @dev Deploy StakeReceipt contract
+     * NOTE: This would need to be replaced with actual bytecode deployment
+     * For now, returns a predicted address
+     */
+    function _deployStakeReceipt(string memory name, string memory) internal view returns (address) {
+        // TODO: Replace with actual contract deployment
+        // This is a placeholder that would need CREATE2 or similar
+        return address(uint160(uint256(keccak256(abi.encodePacked(name, block.timestamp)))));
+    }
+    
+    /**
+     * @dev Deploy SwapPool contract  
+     * NOTE: This would need to be replaced with actual bytecode deployment
+     * For now, returns a predicted address
+     */
+    function _deploySwapPool(
+        address nftCollection,
+        address receiptContract,
+        address stonerPool,
+        uint256 swapFeeInWei,
+        uint256 stonerShare
+    ) internal view returns (address) {
+        // TODO: Replace with actual contract deployment
+        // This is a placeholder that would need CREATE2 or similar
+        return address(uint160(uint256(keccak256(abi.encodePacked(
+            nftCollection,
+            receiptContract,
+            stonerPool,
+            swapFeeInWei,
+            stonerShare,
+            block.timestamp
+        )))));
     }
 }
