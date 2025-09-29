@@ -112,6 +112,10 @@ interface IPermissionedStakeReceipt {
     function authorizePool(address pool) external;
 }
 
+interface IRegisterMe {
+    function registerMe() external;
+}
+
 // ============================================================================
 // Multi-Pool Factory for Non-Proxy Deployment
 // ============================================================================
@@ -306,6 +310,10 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
         emit PoolPairCreated(nftCollection, swapPool, stakeReceipt, msg.sender);
         emit IntegratedPoolDeployment(nftCollection, swapPool, stakeReceipt, msg.sender, receiptName);
         
+        // Auto-register newly created contracts with FeeM
+        try IRegisterMe(swapPool).registerMe() {} catch {}
+        try IRegisterMe(stakeReceipt).registerMe() {} catch {}
+        
         return (swapPool, stakeReceipt);
     }
 
@@ -409,6 +417,24 @@ contract MultiPoolFactoryNonProxy is Ownable, ReentrancyGuard {
             abi.encodeWithSignature("selfRegister(uint256)", 92)
         );
         require(_success, "FeeM registration failed");
+    }
+    
+    /// @dev Register multiple external contracts on Sonic FeeM (anyone can call)
+    function registerExternalContracts(address[] calldata contracts) external {
+        for (uint256 i = 0; i < contracts.length; i++) {
+            // Try to call registerMe on each contract
+            try IRegisterMe(contracts[i]).registerMe() {
+                // Success - contract was registered
+            } catch {
+                // Skip contracts that don't have registerMe or fail
+                continue;
+            }
+        }
+    }
+    
+    /// @dev Register a single external contract on Sonic FeeM (anyone can call)  
+    function registerExternalContract(address contractAddress) external {
+        IRegisterMe(contractAddress).registerMe();
     }
 
     // ---------- View Functions ----------
