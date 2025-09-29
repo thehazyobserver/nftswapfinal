@@ -700,8 +700,16 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     
     function earned(address account) public view returns (uint256) {
         uint256 userActiveSlots = getUserActiveSlotCount(account);
+        uint256 currentRewardPerToken = rewardPerToken();
+        uint256 userPaid = userRewardPerTokenPaid[account];
+        
+        // Prevent underflow - if user has been paid more than current rate, no additional rewards
+        if (userPaid >= currentRewardPerToken) {
+            return pendingRewards[account];
+        }
+        
         return pendingRewards[account] + 
-               (userActiveSlots * (rewardPerToken() - userRewardPerTokenPaid[account])) / PRECISION;
+               (userActiveSlots * (currentRewardPerToken - userPaid)) / PRECISION;
     }
     
     function getUserActiveSlotCount(address user) public view returns (uint256 count) {

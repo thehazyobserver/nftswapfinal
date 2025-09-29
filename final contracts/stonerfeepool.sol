@@ -572,10 +572,13 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     function _updateReward(address user) internal {
         uint256 userBalance = stakedTokens[user].length;
         
-        // Update native token rewards
-        uint256 delta = rewardPerTokenStored - userRewardPerTokenPaid[user];
-        uint256 owed = (userBalance * delta) / 1e18;
-        rewards[user] += owed;
+        // Update native token rewards - prevent underflow
+        uint256 userPaid = userRewardPerTokenPaid[user];
+        if (rewardPerTokenStored > userPaid) {
+            uint256 delta = rewardPerTokenStored - userPaid;
+            uint256 owed = (userBalance * delta) / 1e18;
+            rewards[user] += owed;
+        }
         userRewardPerTokenPaid[user] = rewardPerTokenStored;
         
         // Update ERC20 rewards for all whitelisted tokens
@@ -586,10 +589,16 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         uint256 tokenCount = whitelistedTokensList.length;
         for (uint256 i = 0; i < tokenCount; ++i) {
             address token = whitelistedTokensList[i];
-            uint256 delta = erc20RewardPerTokenStored[token] - erc20UserRewardPerTokenPaid[user][token];
-            uint256 owed = (userBalance * delta) / 1e18;
-            erc20Rewards[user][token] += owed;
-            erc20UserRewardPerTokenPaid[user][token] = erc20RewardPerTokenStored[token];
+            uint256 userPaid = erc20UserRewardPerTokenPaid[user][token];
+            uint256 currentReward = erc20RewardPerTokenStored[token];
+            
+            // Prevent underflow
+            if (currentReward > userPaid) {
+                uint256 delta = currentReward - userPaid;
+                uint256 owed = (userBalance * delta) / 1e18;
+                erc20Rewards[user][token] += owed;
+            }
+            erc20UserRewardPerTokenPaid[user][token] = currentReward;
         }
     }
 
@@ -804,7 +813,14 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
 
     function earned(address user) external view returns (uint256) {
         uint256 userBalance = stakedTokens[user].length;
-        uint256 delta = rewardPerTokenStored - userRewardPerTokenPaid[user];
+        uint256 userPaid = userRewardPerTokenPaid[user];
+        
+        // Prevent underflow
+        if (rewardPerTokenStored <= userPaid) {
+            return rewards[user];
+        }
+        
+        uint256 delta = rewardPerTokenStored - userPaid;
         return rewards[user] + ((userBalance * delta) / 1e18);
     }
 
@@ -812,7 +828,15 @@ contract StonerFeePool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         if (!whitelistedTokens[token]) return 0;
         
         uint256 userBalance = stakedTokens[user].length;
-        uint256 delta = erc20RewardPerTokenStored[token] - erc20UserRewardPerTokenPaid[user][token];
+        uint256 userPaid = erc20UserRewardPerTokenPaid[user][token];
+        uint256 currentReward = erc20RewardPerTokenStored[token];
+        
+        // Prevent underflow
+        if (currentReward <= userPaid) {
+            return erc20Rewards[user][token];
+        }
+        
+        uint256 delta = currentReward - userPaid;
         return erc20Rewards[user][token] + ((userBalance * delta) / 1e18);
     }
 
