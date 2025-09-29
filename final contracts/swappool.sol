@@ -216,11 +216,6 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
     // Batch limits
     uint256 public maxBatchSize = 10;
     uint256 public maxUnstakeAllLimit = 20;
-    
-    // World-class circuit breaker for extreme market conditions
-    uint256 public maxDailyVolume = 1000; // Max swaps per day
-    uint256 public dailyVolumeCount;
-    uint256 public lastVolumeResetDay;
 
     // Events
     event SwapExecuted(address indexed user, uint256 tokenIdIn, uint256 tokenIdOut, uint256 slotId, uint256 feePaid);
@@ -404,17 +399,6 @@ contract SwapPool is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         
         if (poolTokens.length == 0) revert NoTokensAvailable();
         if (msg.value != swapFeeInWei) revert IncorrectFee();
-        
-        // World-class circuit breaker - reset daily counter if new day
-        uint256 currentDay = block.timestamp / 86400;
-        if (currentDay > lastVolumeResetDay) {
-            dailyVolumeCount = 0;
-            lastVolumeResetDay = currentDay;
-        }
-        
-        // Check daily volume limit for market stability
-        require(dailyVolumeCount < maxDailyVolume, "Daily volume limit reached");
-        dailyVolumeCount++;
 
         // Get random token from pool
         uint256 tokenIdOut = _getRandomAvailableToken();
